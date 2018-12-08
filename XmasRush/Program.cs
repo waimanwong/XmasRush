@@ -118,65 +118,59 @@ class Grid
 
     public static readonly Direction[] AllDirections = new[] { Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT };
 
+    public int CellSetCount => cellsets.Count;
+
     public Grid()
     {
         _tiles = new Tile[Width][];
+
         for (int x = 0; x < Width; x++)
         {
             _tiles[x] = new Tile[Heigth];
         }
+
+        cellsets = new List<CellSet>(Grid.Width * Grid.Heigth);
     }
 
-    public void SetTile(int x, int y, Tile tile)
+    public void AddTile(int x, int y, Tile tile)
     {
         _tiles[x][y] = tile;
-    }
 
-    public void ComputeDisjointSets()
-    {
-        cellsets = new List<CellSet>(Grid.Width * Grid.Heigth);
+        var cell = new Cell(x, y);
+        MakeSet(cell);
 
-        for(int x=0; x < Grid.Width; x++)
+        if(x != 0)
         {
-            for (int y = 0; y < Grid.Heigth; y++)
+            //Check left connection
+            if (this._tiles[x][y].IsOpenedTo(Direction.LEFT) && this._tiles[x-1][y].IsOpenedTo(Direction.RIGHT))
             {
-                var cell = new Cell(x, y);
-                MakeSet(cell);
-            }
-        }
+                CellSet c1 = FindSet(new Cell(x, y));
+                CellSet c2 = FindSet(new Cell(x -  1, y));
 
-        //Find edges
-        for (int x = 0; x < Grid.Width - 1; x++)
-        {
-            for (int y = 0; y < Grid.Heigth - 1; y++)
-            {
-                //check edge at the right
-                if(this._tiles[x][y].IsOpenedTo(Direction.RIGHT) && this._tiles[x + 1][y].IsOpenedTo(Direction.LEFT))
+                if (c1.GetId() != c2.GetId())
                 {
-                    CellSet c1 = FindSet(new Cell(x, y));
-                    CellSet c2 = FindSet(new Cell(x + 1, y));
-
-                    if(c1.GetId() != c2.GetId())
-                    {
-                        Union(c1, c2);
-                    }
-                }
-
-                //check edge at the bottom
-                if (this._tiles[x][y].IsOpenedTo(Direction.DOWN) && this._tiles[x][y+1].IsOpenedTo(Direction.UP))
-                {
-                    CellSet c1 = FindSet(new Cell(x, y));
-                    CellSet c2 = FindSet(new Cell(x + 1, y));
-
-                    if (c1.GetId() != c2.GetId())
-                    {
-                        Union(c1, c2);
-                    }
+                    Union(c1, c2);
                 }
             }
         }
-    }
 
+        if( y != 0)
+        {
+            //Check top connection
+            if (this._tiles[x][y].IsOpenedTo(Direction.UP) && this._tiles[x][y - 1].IsOpenedTo(Direction.DOWN))
+            {
+                CellSet c1 = FindSet(new Cell(x, y));
+                CellSet c2 = FindSet(new Cell(x, y - 1));
+
+                if (c1.GetId() != c2.GetId())
+                {
+                    Union(c1, c2);
+                }
+            }
+        }
+
+    }
+    
     private CellSet FindSet(Cell cell)
     {
         return cellsets.Single(set => set.Contains(cell));
@@ -455,15 +449,18 @@ class XmasRush
 
             Grid grid = new Grid();
 
-            for (int i = 0; i < 7; i++)
+            for (int y = 0; y < 7; y++)
             {
                 inputs = Console.ReadLine().Split(' ');
-                for (int j = 0; j < 7; j++)
+                for (int x = 0; x < 7; x++)
                 {
-                    string tile = inputs[j];
-                    grid.SetTile(j, i, new Tile(tile));
+                    string tile = inputs[x];
+                    grid.AddTile(x, y, new Tile(tile));
                 }
             }
+
+            Debug($"set count = {grid.CellSetCount}");
+
             Player[] players = new Player[2];
 
             for (int i = 0; i < 2; i++)
