@@ -129,6 +129,10 @@ class Grid
         {
             return $"({x.ToString()},{y.ToString()})";
         }
+        public int DistanceTo(Cell otherCell)
+        {
+            return Math.Abs(otherCell.x - this.x) + Math.Abs(otherCell.y - this.y);
+        }
     }
 
     private class CellSet
@@ -265,26 +269,28 @@ class Grid
         _cellsets.Add(new CellSet(cell));
     }
 
-    public IReadOnlyList<Direction> GetPossibleDirections(Position from)
+    public IReadOnlyList<Position> GetConnectedNeighbors(Position from)
     {
-        List<Direction> possibleDirections = new List<Direction>(4);
+        var connectedNeighbors = new List<Position>();
+        var fromTile = _tiles[from.x][from.y];
 
         foreach (var direction in AllDirections)
         {
-            var siblingPosition = from.GetSibling(direction);
-
-            if (PositionIsValid(siblingPosition))
+            if (fromTile.IsOpenedTo(direction))
             {
-                if (FindSet(new Cell(from.x, from.y)) ==
-                    FindSet(new Cell(siblingPosition.x, siblingPosition.y)))
+                var neighborPosition = from.GetSibling(direction);
+                if (this.PositionIsValid(neighborPosition))
                 {
-                    possibleDirections.Add(direction);
+                    var neighborTile = _tiles[neighborPosition.x][neighborPosition.y];
+                    var oppositeDirection = (Direction)(((int)direction + 2) % 4);
+                    if(neighborTile.IsOpenedTo(oppositeDirection))
+                    {
+                        connectedNeighbors.Add(neighborPosition);
+                    }
                 }
             }
-
         }
-
-        return possibleDirections;
+        return connectedNeighbors;
     }
 
     private bool PositionIsValid(Position position)
@@ -512,11 +518,15 @@ class GameState
         this.items = items;
     }
 
-    public Item[] GetRevealedItems(int playerId)
+    public Item[] GetRevealedOnBoardItems(int playerId)
     {
         var revealedItems = quests.Where(q => q.playerId == playerId).Select(x => x.itemName).ToHashSet();
 
-        return items.Where(item => item.playerId == playerId && revealedItems.Contains(item.itemName)).ToArray();
+        return items
+            .Where(item => item.playerId == playerId && 
+                            revealedItems.Contains(item.itemName) && 
+                            item.x >= 0)
+            .ToArray();
     }
 }
 
@@ -549,9 +559,8 @@ class PushAI
         var me = gameState.me;
         var enemy = gameState.enemy;
 
-        var myItems = gameState.GetRevealedItems(0);
-        var enemyItems = gameState.GetRevealedItems(1);
-
+        var myItems = gameState.GetRevealedOnBoardItems(0);
+        
         var myTile = me.tile;
 
         int bestScore = 0;
@@ -565,12 +574,14 @@ class PushAI
                 PushCommand commandUnderTest = new PushCommand(i, direction);
                 int score = 0;
 
+                //XmasRush.Debug($"Testing {commandUnderTest.ToString()}");
+
                 var newGrid = grid.Push(i, direction, myTile);
                 var newMyPlayerPosition = grid.PushPlayer(i, direction, me);
                 var newMyItemPositions = myItems.Select( it => grid.PushItem(i, direction, it)).ToArray();
 
-                var newEnemyPosition = grid.PushPlayer(i, direction, enemy);
-                var newEnemyItemPositions = enemyItems.Select(it => grid.PushItem(i, direction, it)).ToArray();
+                //var newEnemyPosition = grid.PushPlayer(i, direction, enemy);
+                //var newEnemyItemPositions = enemyItems.Select(it => grid.PushItem(i, direction, it)).ToArray();
 
                 foreach (var newNewItemPosition in newMyItemPositions)
                 {
@@ -578,22 +589,12 @@ class PushAI
                     {
                         if (newGrid.ArePositionsConnected(newMyPlayerPosition, newNewItemPosition))
                         {
+                            //XmasRush.Debug("Item connected");
                             score += 1000;
                         }
                     }
                 }
 
-                foreach(var newEnemyItemPosition in newEnemyItemPositions)
-                {
-                    if (newEnemyItemPosition.x >= 0)
-                    {
-                        if (newGrid.ArePositionsConnected(newEnemyItemPosition, newEnemyItemPosition))
-                        {
-                            score -= 1000;
-                        }
-                    }
-                }
-                
                 if(score > bestScore)
                 {
                     bestScore = score;
@@ -609,6 +610,21 @@ class PushAI
 
 class MoveAI
 {
+    private struct PointValue
+    {
+        public int x;
+        public int y;
+        public PointValue(Position p)
+        {
+            this.x = p.x;
+            this.y = p.y;
+        }
+        public bool AreSame(PointValue other)
+        {
+            return other.x == this.x && other.y == this.y;
+        }
+    }
+
     private readonly GameState gameState;
 
     public MoveAI(GameState gameState)
@@ -618,63 +634,31 @@ class MoveAI
 
     public string ComputeCommand()
     {
-        Position myPosition = gameState.me;
+        var cameFrom = ComputeBFS();
+
         var grid = gameState.grid;
-        var myItems = gameState.GetRevealedItems(0).OrderBy(it => it.DistanceTo(myPosition)).ToArray();
+        var myPosition = gameState.me;
+        var myItems = gameState.GetRevealedOnBoardItems(0).OrderBy(it => it.DistanceTo(myPosition)).ToArray();
 
-        List<Direction> directions = new List<Direction>();
-        int moveCount = 0;
+        var connectedItems = myItems
+            .Where(it => grid.ArePositionsConnected(it, myPosition))
+            .OrderBy(it => it.DistanceTo(myPosition))
+            .ToArray();
 
-        var visited = new HashSet<Tuple<int, int>>
+        if (connectedItems.Length == 0)
         {
-            new Tuple<int, int>(myPosition.x, myPosition.y)
-        };
-
-        var frontier = new Queue<Tuple<int, int>>();
-
-        int lowestDistance = 20;
-        frontier.Enqueue(new Tuple<int, int>(myPosition.x, myPosition.y));
-
-        while (frontier.Count > 0)
-        {
-            var p = frontier.Dequeue();
-            var currentPosition = new Position(p.Item1, p.Item2);
-
-            var possibleDirections = grid.GetPossibleDirections(from: currentPosition);
-
-            Direction? bestDirection = null;
-            Position bestNextPosition = currentPosition;
-
-            foreach (var direction in possibleDirections)
-            {
-                var siblingPosition = currentPosition.GetSibling(direction);
-                var positionValue = new Tuple<int, int>(siblingPosition.x, siblingPosition.y);
-                if (visited.Contains(positionValue))
-                {
-                    continue;
-                }
-
-                visited.Add(positionValue);
-                frontier.Enqueue(positionValue);
-
-                var distance = siblingPosition.DistanceTo(myItems[0]);
-
-                if (distance < lowestDistance)
-                {
-                    lowestDistance = distance;
-                    bestDirection = direction;
-                    bestNextPosition = siblingPosition;
-                }
-            }
-
-            if (bestDirection != null)
-            {
-                currentPosition = bestNextPosition;
-                directions.Add(bestDirection.Value);
-            }
-
-            moveCount++;
+            return "PASS";
         }
+
+        //Compute path to first connectedItems
+        var path = ComputePath(
+            from: new PointValue(myPosition), 
+            goal: new PointValue(connectedItems[0]),
+            cameFrom: cameFrom);
+
+        var directions = ComputeDirections(path);
+
+        //XmasRush.Debug($"Move length:{directions.Count.ToString()}");
 
         if (directions.Count > 0)
         {
@@ -686,6 +670,94 @@ class MoveAI
         {
             return "PASS";
         }
+    }
+
+    private IReadOnlyList<Direction> ComputeDirections(PointValue[] path)
+    {
+        List<Direction> directions = new List<Direction>();
+
+        if (path.Length < 2)
+            return directions;
+
+        for(int i = 1; i < path.Length; i++)
+        {
+            var direction = GetDirectionFrom(path[i - 1], path[i]);
+            directions.Add(direction);
+        }
+
+        return directions;
+    }
+
+    private Direction GetDirectionFrom(PointValue from, PointValue to)
+    {
+        if(from.x == to.x -1)
+        {
+            return Direction.RIGHT;
+        }
+        if(from.x == to.x + 1)
+        {
+            return Direction.LEFT;
+        }
+        if(from.y == to.y - 1)
+        {
+            return Direction.DOWN;
+        }
+        if(from.y == to.y + 1 )
+        {
+            return Direction.UP;
+        }
+        throw new NotSupportedException();
+    }
+
+    private PointValue[] ComputePath(PointValue from, PointValue goal, Dictionary<PointValue, PointValue?> cameFrom)
+    {
+        PointValue? current = goal;
+        var path = new List<PointValue>();
+
+        while(current!= null && current.Value.AreSame(from) == false)
+        {
+            path.Add(current.Value);
+            current = cameFrom[current.Value];
+        }
+
+        path.Add(from);
+
+        path.Reverse();
+
+        return path.ToArray();
+    }
+
+    private Dictionary<PointValue, PointValue?> ComputeBFS()
+    {
+        Position myPosition = gameState.me;
+        var grid = gameState.grid;
+
+        var cameFrom = new Dictionary<PointValue, PointValue?>();
+        cameFrom[new PointValue(myPosition)] = null;
+
+        var frontier = new Queue<PointValue>();
+        frontier.Enqueue(new PointValue(myPosition));
+
+        while (frontier.Count > 0)
+        {
+            var current = frontier.Dequeue();
+            var currentPosition = new Position(current.x, current.y);
+
+            var neigbors = grid.GetConnectedNeighbors(from: currentPosition)
+                .Select(p => new PointValue(p))
+                .ToArray();
+
+            foreach (var next in neigbors)
+            {
+                if (cameFrom.ContainsKey(next) == false)
+                {
+                    frontier.Enqueue(next);
+                    cameFrom[next] = current;
+                }
+            }
+        }
+
+        return cameFrom;
     }
 
 }
