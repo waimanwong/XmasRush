@@ -46,6 +46,11 @@ class Position
 
         return new Position(x, y);
     }
+
+    public override string ToString()
+    {
+        return $"Position ({x.ToString()},{y.ToString()})";
+    }
 }
 
 enum Direction
@@ -54,6 +59,56 @@ enum Direction
     RIGHT = 1,
     DOWN = 2,
     LEFT = 3,
+}
+
+class Player : Position
+{
+    private readonly int id;
+    private readonly Tile tile;
+
+    public Player(int id, int x, int y, Tile tile) : base(x, y)
+    {
+        this.id = id;
+        this.tile = tile;
+    }
+}
+
+class Item : Position
+{
+    public readonly string itemName;
+    public readonly int playerId;
+
+    public Item(int x, int y, string itemName, int playerId) : base(x, y)
+    {
+        this.itemName = itemName;
+        this.playerId = playerId;
+    }
+}
+
+class Quest
+{
+    public readonly string itemName;
+    public readonly int playerId;
+
+    public Quest(string itemName, int playerId)
+    {
+        this.itemName = itemName;
+        this.playerId = playerId;
+    }
+}
+
+class Tile
+{
+    private readonly string _directions;
+    public Tile(string tile)
+    {
+        _directions = tile;
+    }
+
+    public bool IsOpenedTo(Direction direction)
+    {
+        return _directions[(int)direction] == '1';
+    }
 }
 
 class Grid
@@ -68,7 +123,12 @@ class Grid
             this.y = y;
         }
 
-        public int Id => this.x + ( this.y * Grid.Width);
+        public int Id => this.x + (this.y * Grid.Width);
+
+        public override string ToString()
+        {
+            return $"({x.ToString()},{y.ToString()})";
+        }
     }
 
     private class CellSet
@@ -101,12 +161,20 @@ class Grid
             {
                 newCellSet.cells.Add(cell);
             }
-            foreach(var cell in otherSet.cells)
+            foreach (var cell in otherSet.cells)
             {
                 newCellSet.cells.Add(cell);
             }
             return newCellSet;
         }
+
+        public override string ToString()
+        {
+            string cellText = string.Join(",", this.cells.Select(c => c.ToString()).ToArray());
+
+            return $"{this.GetId()}={cellText}";
+        }
+
     }
 
     public static int Width = 7;
@@ -114,11 +182,11 @@ class Grid
 
     public readonly Tile[][] _tiles;
 
-    private List<CellSet> cellsets;
+    private List<CellSet> _cellsets;
 
     public static readonly Direction[] AllDirections = new[] { Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT };
 
-    public int CellSetCount => cellsets.Count;
+    public int CellSetCount => _cellsets.Count;
 
     public Grid()
     {
@@ -129,7 +197,7 @@ class Grid
             _tiles[x] = new Tile[Heigth];
         }
 
-        cellsets = new List<CellSet>(Grid.Width * Grid.Heigth);
+        _cellsets = new List<CellSet>(Grid.Width * Grid.Heigth);
     }
 
     public void AddTile(int x, int y, Tile tile)
@@ -139,13 +207,13 @@ class Grid
         var cell = new Cell(x, y);
         MakeSet(cell);
 
-        if(x != 0)
+        if (x != 0)
         {
             //Check left connection
-            if (this._tiles[x][y].IsOpenedTo(Direction.LEFT) && this._tiles[x-1][y].IsOpenedTo(Direction.RIGHT))
+            if (this._tiles[x][y].IsOpenedTo(Direction.LEFT) && this._tiles[x - 1][y].IsOpenedTo(Direction.RIGHT))
             {
                 CellSet c1 = FindSet(new Cell(x, y));
-                CellSet c2 = FindSet(new Cell(x -  1, y));
+                CellSet c2 = FindSet(new Cell(x - 1, y));
 
                 if (c1.GetId() != c2.GetId())
                 {
@@ -154,7 +222,7 @@ class Grid
             }
         }
 
-        if( y != 0)
+        if (y != 0)
         {
             //Check top connection
             if (this._tiles[x][y].IsOpenedTo(Direction.UP) && this._tiles[x][y - 1].IsOpenedTo(Direction.DOWN))
@@ -168,27 +236,26 @@ class Grid
                 }
             }
         }
-
     }
-    
+
     private CellSet FindSet(Cell cell)
     {
-        return cellsets.Single(set => set.Contains(cell));
+        return _cellsets.Single(set => set.Contains(cell));
     }
 
     private void Union(CellSet c1, CellSet c2)
     {
         CellSet newCellSet = c1.Union(c2);
 
-        cellsets.Remove(c1);
-        cellsets.Remove(c2);
+        _cellsets.Remove(c1);
+        _cellsets.Remove(c2);
 
-        cellsets.Add(newCellSet);
+        _cellsets.Add(newCellSet);
     }
 
     private void MakeSet(Cell cell)
     {
-        cellsets.Add(new CellSet(cell));
+        _cellsets.Add(new CellSet(cell));
     }
 
     public IReadOnlyList<Direction> GetPossibleDirections(Position from)
@@ -198,14 +265,16 @@ class Grid
         foreach (var direction in AllDirections)
         {
             var siblingPosition = from.GetSibling(direction);
-            if(PositionIsValid(siblingPosition))
+
+            if (PositionIsValid(siblingPosition))
             {
-                if(FindSet(new Cell(from.x, from.y)) == FindSet(new Cell(siblingPosition.x, siblingPosition.y)))
+                if (FindSet(new Cell(from.x, from.y)) ==
+                    FindSet(new Cell(siblingPosition.x, siblingPosition.y)))
                 {
                     possibleDirections.Add(direction);
                 }
             }
-             
+
         }
 
         return possibleDirections;
@@ -221,57 +290,14 @@ class Grid
         return 0 <= position.x && position.x < Grid.Width &&
                 0 <= position.y && position.y < Grid.Heigth;
     }
-}
 
-class Player : Position
-{
-    private readonly int id;
-    private readonly Tile tile;
-
-    public Player(int id, int x, int y, Tile tile) : base(x, y)
+    public void DumpDisjoinSets()
     {
-        this.id = id;
-        this.tile = tile;
+        foreach (var cellSet in _cellsets)
+        {
+            XmasRush.Debug(cellSet.ToString());
+        }
     }
-}
-
-class Item : Position
-{
-    public readonly string itemName;
-    public readonly int playerId;
-
-    public Item(int x, int y, string itemName, int playerId) : base(x, y)
-    {
-        this.itemName = itemName;
-        this.playerId = playerId;
-    }
-}
-
-class Quest
-{
-    private readonly string itemName;
-    private readonly int playerId;
-
-    public Quest(string itemName, int playerId)
-    {
-        this.itemName = itemName;
-        this.playerId = playerId;
-    }
-}
-
-class Tile
-{
-    private readonly string _directions;
-    public Tile(string tile)
-    {
-        _directions = tile;
-    }
-
-    public bool IsOpenedTo(Direction direction)
-    {
-        return _directions[(int)direction] == '1';
-    }
-    
 }
 
 class GameState
@@ -292,6 +318,13 @@ class GameState
         this.quests = quests;
         this.items = items;
     }
+
+    public Item GetMyItem()
+    {
+        var quest = quests.First(q => q.playerId == 0);
+
+        return items.First(i => i.itemName == quest.itemName && i.playerId == 0);
+    }
 }
 
 class PushAI
@@ -309,7 +342,7 @@ class PushAI
 
 
         var myPosition = gameState.me;
-        var myitem = gameState.items.First(x => x.playerId == 0);
+        var myitem = gameState.GetMyItem();
 
         if (myitem.x == -1)
             return $"PUSH {myPosition.x} DOWN";
@@ -319,7 +352,7 @@ class PushAI
 
         int index = 0;
         Direction bestDirection = Direction.DOWN;
-        
+
         if (deltaX > deltaY || deltaX == 0)
         {
             index = myitem.y;
@@ -345,7 +378,6 @@ class PushAI
             }
         }
 
-        
         return $"PUSH {index} {bestDirection.ToString()}";
     }
 }
@@ -363,9 +395,9 @@ class MoveAI
     {
         Position myPosition = gameState.me;
         var grid = gameState.grid;
-        var myitem = gameState.items.First(x => x.playerId == 0);
+        var myitem = gameState.GetMyItem();
 
-        if(myitem.x == -1)
+        if (myitem.x == -1)
         {
             return "PASS";
         }
@@ -377,7 +409,7 @@ class MoveAI
         visited.Add(new Tuple<int, int>(myPosition.x, myPosition.y));
 
         var borders = new Queue<Tuple<int, int>>();
-        
+
         int lowestDistance = 20;
         borders.Enqueue(new Tuple<int, int>(myPosition.x, myPosition.y));
 
@@ -387,13 +419,13 @@ class MoveAI
             var currentPosition = new Position(p.Item1, p.Item2);
 
             var possibleDirections = grid.GetPossibleDirections(from: currentPosition);
-            
+
             Direction? bestDirection = null;
-            Position bestNextPosition = myPosition;
-            
+            Position bestNextPosition = currentPosition;
+
             foreach (var direction in possibleDirections)
             {
-                var siblingPosition = myPosition.GetSibling(direction);
+                var siblingPosition = currentPosition.GetSibling(direction);
                 var positionValue = new Tuple<int, int>(siblingPosition.x, siblingPosition.y);
                 if (visited.Contains(positionValue))
                 {
@@ -415,7 +447,7 @@ class MoveAI
 
             if (bestDirection != null)
             {
-                myPosition = bestNextPosition;
+                currentPosition = bestNextPosition;
                 directions.Add(bestDirection.Value);
             }
 
@@ -433,7 +465,7 @@ class MoveAI
             return "PASS";
         }
     }
-    
+
 }
 
 class XmasRush
@@ -463,8 +495,6 @@ class XmasRush
                     grid.AddTile(x, y, new Tile(tile));
                 }
             }
-
-            Debug($"set count = {grid.CellSetCount}");
 
             Player[] players = new Player[2];
 
