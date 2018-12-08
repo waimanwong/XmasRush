@@ -634,29 +634,38 @@ class MoveAI
 
     public string ComputeCommand()
     {
-        var cameFrom = ComputeBFS();
-
         var grid = gameState.grid;
-        var myPosition = gameState.me;
+        Position myPosition = gameState.me;
         var myItems = gameState.GetRevealedOnBoardItems(0).OrderBy(it => it.DistanceTo(myPosition)).ToArray();
 
+        var maxMoveCount = 20;
+        var directions = new List<Direction>();
         var connectedItems = myItems
-            .Where(it => grid.ArePositionsConnected(it, myPosition))
-            .OrderBy(it => it.DistanceTo(myPosition))
-            .ToArray();
+               .Where(it => grid.ArePositionsConnected(it, myPosition))
+               .OrderBy(it => it.DistanceTo(myPosition))
+               .ToArray();
 
         if (connectedItems.Length == 0)
         {
             return "PASS";
         }
 
-        //Compute path to first connectedItems
-        var path = ComputePath(
-            from: new PointValue(myPosition), 
-            goal: new PointValue(connectedItems[0]),
-            cameFrom: cameFrom);
+        int currentConnectedItemIndex = 0;
+        while (directions.Count < maxMoveCount && currentConnectedItemIndex < connectedItems.Length)
+        {
+            var cameFrom = ComputeBFS(fromPosition: myPosition);
 
-        var directions = ComputeDirections(path);
+            //Compute path to first connectedItems
+            var path = ComputePath(
+                from: new PointValue(myPosition),
+                goal: new PointValue(connectedItems[currentConnectedItemIndex]),
+                cameFrom: cameFrom);
+
+            directions.AddRange(ComputeDirections(path));
+
+            myPosition = connectedItems[currentConnectedItemIndex];
+            currentConnectedItemIndex++;
+        }
 
         //XmasRush.Debug($"Move length:{directions.Count.ToString()}");
 
@@ -727,16 +736,16 @@ class MoveAI
         return path.ToArray();
     }
 
-    private Dictionary<PointValue, PointValue?> ComputeBFS()
+    private Dictionary<PointValue, PointValue?> ComputeBFS(Position fromPosition)
     {
-        Position myPosition = gameState.me;
+        
         var grid = gameState.grid;
 
         var cameFrom = new Dictionary<PointValue, PointValue?>();
-        cameFrom[new PointValue(myPosition)] = null;
+        cameFrom[new PointValue(fromPosition)] = null;
 
         var frontier = new Queue<PointValue>();
-        frontier.Enqueue(new PointValue(myPosition));
+        frontier.Enqueue(new PointValue(fromPosition));
 
         while (frontier.Count > 0)
         {
