@@ -512,11 +512,11 @@ class GameState
         this.items = items;
     }
 
-    public Item GetMyItem()
+    public Item[] GetRevealedItems(int playerId)
     {
-        var quest = quests.First(q => q.playerId == 0);
+        var revealedItems = quests.Where(q => q.playerId == playerId).Select(x => x.itemName).ToHashSet();
 
-        return items.First(i => i.itemName == quest.itemName && i.playerId == 0);
+        return items.Where(item => item.playerId == playerId && revealedItems.Contains(item.itemName)).ToArray();
     }
 }
 
@@ -547,7 +547,10 @@ class PushAI
     {
         var grid = gameState.grid;
         var me = gameState.me;
-        var myitem = gameState.GetMyItem();
+        var enemy = gameState.enemy;
+
+        var myItems = gameState.GetRevealedItems(0);
+        var enemyItems = gameState.GetRevealedItems(1);
 
         var myTile = me.tile;
 
@@ -563,14 +566,31 @@ class PushAI
                 int score = 0;
 
                 var newGrid = grid.Push(i, direction, myTile);
-                var newPlayerPosition = grid.PushPlayer(i, direction, me);
-                var newItemPosition = grid.PushItem(i, direction, myitem);
-                
-                if (newItemPosition.x >= 0)
+                var newMyPlayerPosition = grid.PushPlayer(i, direction, me);
+                var newMyItemPositions = myItems.Select( it => grid.PushItem(i, direction, it)).ToArray();
+
+                var newEnemyPosition = grid.PushPlayer(i, direction, enemy);
+                var newEnemyItemPositions = enemyItems.Select(it => grid.PushItem(i, direction, it)).ToArray();
+
+                foreach (var newNewItemPosition in newMyItemPositions)
                 {
-                    if (newGrid.ArePositionsConnected(newPlayerPosition, newItemPosition))
+                    if (newNewItemPosition.x >= 0)
                     {
-                        score += 1000;
+                        if (newGrid.ArePositionsConnected(newMyPlayerPosition, newNewItemPosition))
+                        {
+                            score += 1000;
+                        }
+                    }
+                }
+
+                foreach(var newEnemyItemPosition in newEnemyItemPositions)
+                {
+                    if (newEnemyItemPosition.x >= 0)
+                    {
+                        if (newGrid.ArePositionsConnected(newEnemyItemPosition, newEnemyItemPosition))
+                        {
+                            score -= 1000;
+                        }
                     }
                 }
                 
@@ -600,27 +620,24 @@ class MoveAI
     {
         Position myPosition = gameState.me;
         var grid = gameState.grid;
-        var myitem = gameState.GetMyItem();
-
-        if (myitem.x == -1)
-        {
-            return "PASS";
-        }
+        var myItems = gameState.GetRevealedItems(0).OrderBy(it => it.DistanceTo(myPosition)).ToArray();
 
         List<Direction> directions = new List<Direction>();
         int moveCount = 0;
 
-        var visited = new HashSet<Tuple<int, int>>();
-        visited.Add(new Tuple<int, int>(myPosition.x, myPosition.y));
+        var visited = new HashSet<Tuple<int, int>>
+        {
+            new Tuple<int, int>(myPosition.x, myPosition.y)
+        };
 
-        var borders = new Queue<Tuple<int, int>>();
+        var frontier = new Queue<Tuple<int, int>>();
 
         int lowestDistance = 20;
-        borders.Enqueue(new Tuple<int, int>(myPosition.x, myPosition.y));
+        frontier.Enqueue(new Tuple<int, int>(myPosition.x, myPosition.y));
 
-        while (borders.Count > 0)
+        while (frontier.Count > 0)
         {
-            var p = borders.Dequeue();
+            var p = frontier.Dequeue();
             var currentPosition = new Position(p.Item1, p.Item2);
 
             var possibleDirections = grid.GetPossibleDirections(from: currentPosition);
@@ -638,9 +655,9 @@ class MoveAI
                 }
 
                 visited.Add(positionValue);
-                borders.Enqueue(positionValue);
+                frontier.Enqueue(positionValue);
 
-                var distance = siblingPosition.DistanceTo(myitem);
+                var distance = siblingPosition.DistanceTo(myItems[0]);
 
                 if (distance < lowestDistance)
                 {
