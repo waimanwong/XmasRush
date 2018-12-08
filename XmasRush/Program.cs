@@ -64,7 +64,7 @@ enum Direction
 class Player : Position
 {
     private readonly int id;
-    private readonly Tile tile;
+    public readonly Tile tile;
 
     public Player(int id, int x, int y, Tile tile) : base(x, y)
     {
@@ -97,7 +97,7 @@ class Quest
     }
 }
 
-class Tile
+struct Tile
 {
     private readonly string _directions;
     public Tile(string tile)
@@ -180,9 +180,9 @@ class Grid
     public static int Width = 7;
     public static int Heigth = 7;
 
-    public readonly Tile[][] _tiles;
+    private readonly Tile[][] _tiles;
 
-    private List<CellSet> _cellsets;
+    private readonly List<CellSet> _cellsets;
 
     public static readonly Direction[] AllDirections = new[] { Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT };
 
@@ -238,11 +238,18 @@ class Grid
         }
     }
 
+    public bool ArePositionsConnected(Position pos1, Position pos2)
+    {
+        Cell c1 = new Cell(pos1.x, pos1.y);
+        Cell c2 = new Cell(pos2.x, pos2.y);
+        return FindSet(c1) == FindSet(c2);
+    }
+
     private CellSet FindSet(Cell cell)
     {
         return _cellsets.Single(set => set.Contains(cell));
     }
-
+    
     private void Union(CellSet c1, CellSet c2)
     {
         CellSet newCellSet = c1.Union(c2);
@@ -280,11 +287,6 @@ class Grid
         return possibleDirections;
     }
 
-    private Direction OppositeDirection(Direction direction)
-    {
-        return (Direction)(((int)direction + 2) % 4);
-    }
-
     private bool PositionIsValid(Position position)
     {
         return 0 <= position.x && position.x < Grid.Width &&
@@ -297,6 +299,197 @@ class Grid
         {
             XmasRush.Debug(cellSet.ToString());
         }
+    }
+
+    public Grid Push(int index, Direction direction, Tile tile)
+    {
+        if (direction == Direction.LEFT || direction == Direction.RIGHT)
+            return PushHorizontal(index, direction, tile);
+        else
+            return PushVertical(index, direction, tile);
+    }
+
+    public Position PushItem(int index, Direction direction, Position itemPosition)
+    {
+        if (direction == Direction.LEFT || direction == Direction.RIGHT)
+            return PushItemHorizontal(index, direction, itemPosition);
+        else
+            return PushItemVertical(index, direction, itemPosition);
+    }
+
+    private Position PushItemVertical(int index, Direction direction, Position itemPosition)
+    {
+        if (itemPosition.x != index || itemPosition.x < 0 )
+        {
+            return itemPosition;
+        }
+        else
+        {
+            int newY = direction == Direction.DOWN ? itemPosition.y + 1 : itemPosition.y - 1;
+            if(newY < 0 || newY == Grid.Heigth)
+            {
+                return new Position(-1, -1);
+            }
+            return new Position(x: itemPosition.x, y: newY );
+        }
+    }
+
+    private Position PushItemHorizontal(int index, Direction direction, Position itemPosition)
+    {
+        if (itemPosition.y != index || itemPosition.y < 0)
+        {
+            return itemPosition;
+        }
+        else
+        {
+            int newX = direction == Direction.RIGHT ? itemPosition.x + 1 : itemPosition.x - 1;
+            if(newX < 0 || newX == Grid.Width)
+            {
+                return new Position(-1, -1);
+            }
+
+            return new Position(x: newX , y: itemPosition.y);
+        }
+    }
+    
+    public Position PushPlayer(int index, Direction direction, Position playerPosition)
+    {
+        if (direction == Direction.LEFT || direction == Direction.RIGHT)
+            return PushPlayerHorizontal(index, direction, playerPosition);
+        else
+            return PushPlayerVertical(index, direction, playerPosition);
+    }
+
+    private Position PushPlayerVertical(int index, Direction direction, Position playerPosition)
+    {
+        if(playerPosition.x != index)
+        {
+            return playerPosition;
+        }
+        else
+        {
+            int newY = direction == Direction.DOWN ? playerPosition.y + 1 : playerPosition.y - 1;
+
+            if(newY < 0)
+            {
+                newY = Grid.Heigth - 1;
+            }
+            if(newY >= Grid.Heigth)
+            {
+                newY = 0;
+            }
+
+            return new Position(x: playerPosition.x, y: newY);
+        }
+    }
+
+    private Position PushPlayerHorizontal(int index, Direction direction, Position playerPosition)
+    {
+        if(playerPosition.y != index)
+        {
+            return playerPosition;
+        }
+        else
+        {
+            int newX = direction == Direction.RIGHT ? playerPosition.x + 1 : playerPosition.x - 1;
+            if(newX < 0)
+            {
+                newX = Grid.Width - 1;
+            }
+            if(newX >= Grid.Width)
+            {
+                newX = 0;
+            }
+            return new Position(x: newX, y: playerPosition.y);
+        }
+    }
+
+    private Grid PushHorizontal(int index, Direction direction, Tile tile)
+    {
+        Grid newGrid = new Grid();
+
+        for(int y = 0; y < Grid.Heigth; y++)
+        {
+            if(y != index)
+            {
+                for(int x = 0; x < Grid.Width; x++)
+                {
+                    newGrid.AddTile(x, y, this._tiles[x][y]);
+                }
+            }
+            else
+            {
+                if(direction == Direction.LEFT)
+                {
+                    int x = 0;
+                    for(; x < Grid.Width - 1;  x++)
+                    {
+                        newGrid.AddTile(x, y, this._tiles[x + 1][y]);
+                    }
+                    newGrid.AddTile(x, y, tile);
+                }
+                else if(direction == Direction.RIGHT)
+                {
+                    newGrid.AddTile(0, y, tile);
+                    for (int x = 1; x < Grid.Width; x++)
+                    {
+                        newGrid.AddTile(x, y, this._tiles[x - 1][y]);
+                    }
+                }
+                else
+                {
+                    throw new NotSupportedException();
+                }
+            }
+        }
+        return newGrid;
+    }
+
+    private Grid PushVertical(int index, Direction direction, Tile tile)
+    {
+        Grid newGrid = new Grid();
+
+        for(int y = 0; y < Grid.Heigth; y++)
+        {
+            for(int x = 0; x < Grid.Width; x++)
+            {
+                if (x != index)
+                {
+                    newGrid.AddTile(x, y, this._tiles[x][y]);
+                }
+                else
+                {
+                    if (direction == Direction.DOWN)
+                    {
+                        if (y == 0)
+                        {
+                            newGrid.AddTile(x, y, tile);
+                        }
+                        else
+                        {
+                            newGrid.AddTile(x, y, this._tiles[x][y-1]);
+                        }
+                    }
+                    else if (direction == Direction.UP)
+                    {
+                        if (y == Grid.Heigth - 1)
+                        {
+                            newGrid.AddTile(x, y, tile);
+                        }
+                        else
+                        {
+                            newGrid.AddTile(x, y, this._tiles[x][y + 1]);
+                        }
+                    }
+                    else
+                    {
+                        throw new NotSupportedException();
+                    }
+                }
+            }
+        }
+
+        return newGrid;
     }
 }
 
@@ -330,7 +523,21 @@ class GameState
 class PushAI
 {
     private readonly GameState gameState;
+    private struct PushCommand
+    {
+        public int index;
+        public Direction direction;
+        public PushCommand(int index, Direction direction)
+        {
+            this.index = index;
+            this.direction = direction;
+        }
 
+        public override string ToString()
+        {
+            return $"PUSH {index.ToString()} {direction.ToString()}";
+        }
+    }
     public PushAI(GameState gameState)
     {
         this.gameState = gameState;
@@ -339,46 +546,52 @@ class PushAI
     public string ComputeCommand()
     {
         var grid = gameState.grid;
-
-
-        var myPosition = gameState.me;
+        var me = gameState.me;
         var myitem = gameState.GetMyItem();
 
-        if (myitem.x == -1)
-            return $"PUSH {myPosition.x} DOWN";
+        var myTile = me.tile;
 
-        var deltaX = Math.Abs(myPosition.x - myitem.x);
-        var deltaY = Math.Abs(myPosition.y - myitem.y);
+        int bestScore = 0;
+        Random rand = new Random();
+        PushCommand bestPushCommand = new PushCommand(rand.Next(0, 6), (Direction)rand.Next(0,4));
 
-        int index = 0;
-        Direction bestDirection = Direction.DOWN;
+        XmasRush.Debug($"Current player position:{me.ToString()}");
+        XmasRush.Debug($"Current item position:{myitem.ToString()}");
 
-        if (deltaX > deltaY || deltaX == 0)
+        for (int i = 0; i < 7; i++)
         {
-            index = myitem.y;
-            if (myPosition.x > myitem.x)
+            foreach(var direction in Grid.AllDirections)
             {
-                bestDirection = Direction.RIGHT;
-            }
-            else
-            {
-                bestDirection = Direction.LEFT;
+                PushCommand commandUnderTest = new PushCommand(i, direction);
+                XmasRush.Debug($"Test {commandUnderTest.ToString()}");
+                int score = 0;
+
+                var newGrid = grid.Push(i, direction, myTile);
+                var newPlayerPosition = grid.PushPlayer(i, direction, me);
+                var newItemPosition = grid.PushItem(i, direction, myitem);
+                
+                XmasRush.Debug($"New player position:{newPlayerPosition.ToString()}");
+                XmasRush.Debug($"New item position:{newItemPosition.ToString()}");
+                
+                if (newItemPosition.x < 0)
+                {
+                    if (newGrid.ArePositionsConnected(newPlayerPosition, newItemPosition))
+                    {
+                        XmasRush.Debug("player and items are connected");
+                        score += 1000;
+                    }
+                }
+                
+                if(score > bestScore)
+                {
+                    bestScore = score;
+                    bestPushCommand = commandUnderTest;
+                }
             }
         }
-        else
-        {
-            index = myitem.x;
-            if (myPosition.y > myitem.y)
-            {
-                bestDirection = Direction.DOWN;
-            }
-            else
-            {
-                bestDirection = Direction.UP;
-            }
-        }
 
-        return $"PUSH {index} {bestDirection.ToString()}";
+        return bestPushCommand.ToString();
+
     }
 }
 
