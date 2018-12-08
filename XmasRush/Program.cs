@@ -554,30 +554,22 @@ class PushAI
         int bestScore = 0;
         Random rand = new Random();
         PushCommand bestPushCommand = new PushCommand(rand.Next(0, 6), (Direction)rand.Next(0,4));
-
-        XmasRush.Debug($"Current player position:{me.ToString()}");
-        XmasRush.Debug($"Current item position:{myitem.ToString()}");
-
+        
         for (int i = 0; i < 7; i++)
         {
             foreach(var direction in Grid.AllDirections)
             {
                 PushCommand commandUnderTest = new PushCommand(i, direction);
-                XmasRush.Debug($"Test {commandUnderTest.ToString()}");
                 int score = 0;
 
                 var newGrid = grid.Push(i, direction, myTile);
                 var newPlayerPosition = grid.PushPlayer(i, direction, me);
                 var newItemPosition = grid.PushItem(i, direction, myitem);
                 
-                XmasRush.Debug($"New player position:{newPlayerPosition.ToString()}");
-                XmasRush.Debug($"New item position:{newItemPosition.ToString()}");
-                
-                if (newItemPosition.x < 0)
+                if (newItemPosition.x >= 0)
                 {
                     if (newGrid.ArePositionsConnected(newPlayerPosition, newItemPosition))
                     {
-                        XmasRush.Debug("player and items are connected");
                         score += 1000;
                     }
                 }
