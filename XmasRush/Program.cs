@@ -193,23 +193,19 @@ class Grid
 
     public IReadOnlyList<Direction> GetPossibleDirections(Position from)
     {
-        Tile fromTile = _tiles[from.x][from.y];
-
         List<Direction> possibleDirections = new List<Direction>(4);
 
         foreach (var direction in AllDirections)
         {
-            if (fromTile.IsOpenedTo(direction))
+            var siblingPosition = from.GetSibling(direction);
+            if(PositionIsValid(siblingPosition))
             {
-                if (TryGetTile(from, direction, out Tile otherTile))
+                if(FindSet(new Cell(from.x, from.y)) == FindSet(new Cell(siblingPosition.x, siblingPosition.y)))
                 {
-                    if (otherTile.IsOpenedTo(OppositeDirection(direction)))
-                    {
-                        //Both tiles connected
-                        possibleDirections.Add(direction);
-                    }
+                    possibleDirections.Add(direction);
                 }
             }
+             
         }
 
         return possibleDirections;
@@ -218,19 +214,6 @@ class Grid
     private Direction OppositeDirection(Direction direction)
     {
         return (Direction)(((int)direction + 2) % 4);
-    }
-
-    private bool TryGetTile(Position from, Direction direction, out Tile tile)
-    {
-        tile = null;
-        Position siblingPosition = from.GetSibling(direction);
-
-        if (PositionIsValid(siblingPosition))
-        {
-            tile = _tiles[siblingPosition.x][siblingPosition.y];
-        }
-
-        return tile != null;
     }
 
     private bool PositionIsValid(Position position)
@@ -322,37 +305,47 @@ class PushAI
 
     public string ComputeCommand()
     {
-        var myPosition = gameState.me;
         var grid = gameState.grid;
+
+
+        var myPosition = gameState.me;
         var myitem = gameState.items.First(x => x.playerId == 0);
-        
-        int lowestDistance = int.MaxValue;
+
+        if (myitem.x == -1)
+            return $"PUSH {myPosition.x} DOWN";
+
+        var deltaX = Math.Abs(myPosition.x - myitem.x);
+        var deltaY = Math.Abs(myPosition.y - myitem.y);
+
+        int index = 0;
         Direction bestDirection = Direction.DOWN;
-
-        foreach (var direction in Grid.AllDirections)
+        
+        if (deltaX > deltaY || deltaX == 0)
         {
-            var itemNewPosition = myitem.GetSibling(direction);
-
-            var distanceToMe = itemNewPosition.DistanceTo(myPosition);
-
-            if (distanceToMe < lowestDistance)
+            index = myitem.y;
+            if (myPosition.x > myitem.x)
             {
-                lowestDistance = distanceToMe;
-                bestDirection = direction;
+                bestDirection = Direction.RIGHT;
             }
-        }
-
-        int index = -1;
-
-        if (bestDirection == Direction.DOWN || bestDirection == Direction.UP)
-        {
-            index = myitem.x;
+            else
+            {
+                bestDirection = Direction.LEFT;
+            }
         }
         else
         {
-            index = myitem.y;
+            index = myitem.x;
+            if (myPosition.y > myitem.y)
+            {
+                bestDirection = Direction.DOWN;
+            }
+            else
+            {
+                bestDirection = Direction.UP;
+            }
         }
 
+        
         return $"PUSH {index} {bestDirection.ToString()}";
     }
 }
@@ -372,17 +365,28 @@ class MoveAI
         var grid = gameState.grid;
         var myitem = gameState.items.First(x => x.playerId == 0);
 
+        if(myitem.x == -1)
+        {
+            return "PASS";
+        }
+
         List<Direction> directions = new List<Direction>();
         int moveCount = 0;
 
         var visited = new HashSet<Tuple<int, int>>();
         visited.Add(new Tuple<int, int>(myPosition.x, myPosition.y));
-        int lowestDistance = int.MaxValue;
 
-        while (moveCount <= 20)
+        var borders = new Queue<Tuple<int, int>>();
+        
+        int lowestDistance = 20;
+        borders.Enqueue(new Tuple<int, int>(myPosition.x, myPosition.y));
+
+        while (borders.Count > 0)
         {
-            var possibleDirections = grid.GetPossibleDirections(from: myPosition);
+            var p = borders.Dequeue();
+            var currentPosition = new Position(p.Item1, p.Item2);
 
+            var possibleDirections = grid.GetPossibleDirections(from: currentPosition);
             
             Direction? bestDirection = null;
             Position bestNextPosition = myPosition;
@@ -397,6 +401,7 @@ class MoveAI
                 }
 
                 visited.Add(positionValue);
+                borders.Enqueue(positionValue);
 
                 var distance = siblingPosition.DistanceTo(myitem);
 
