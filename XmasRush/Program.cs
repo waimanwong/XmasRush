@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 /**
  * Help the Christmas elves fetch presents in a magical labyrinth!
@@ -78,23 +79,15 @@ class Item : Position
     public readonly string itemName;
     public readonly int playerId;
 
+    public bool IsInQuest = false;
+
     public Item(int x, int y, string itemName, int playerId) : base(x, y)
     {
         this.itemName = itemName;
         this.playerId = playerId;
     }
-}
 
-class Quest
-{
-    public readonly string itemName;
-    public readonly int playerId;
-
-    public Quest(string itemName, int playerId)
-    {
-        this.itemName = itemName;
-        this.playerId = playerId;
-    }
+    
 }
 
 struct Tile
@@ -315,46 +308,46 @@ class Grid
             return PushVertical(index, direction, tile);
     }
 
-    public Position PushItem(int index, Direction direction, Position itemPosition)
+    public Item PushItem(int index, Direction direction, Item item)
     {
         if (direction == Direction.LEFT || direction == Direction.RIGHT)
-            return PushItemHorizontal(index, direction, itemPosition);
+            return PushItemHorizontal(index, direction, item);
         else
-            return PushItemVertical(index, direction, itemPosition);
+            return PushItemVertical(index, direction, item);
     }
 
-    private Position PushItemVertical(int index, Direction direction, Position itemPosition)
+    private Item PushItemVertical(int index, Direction direction, Item item)
     {
-        if (itemPosition.x != index || itemPosition.x < 0 )
+        if (item.x != index || item.x < 0 )
         {
-            return itemPosition;
+            return item;
         }
         else
         {
-            int newY = direction == Direction.DOWN ? itemPosition.y + 1 : itemPosition.y - 1;
+            int newY = direction == Direction.DOWN ? item.y + 1 : item.y - 1;
             if(newY < 0 || newY == Grid.Heigth)
             {
-                return new Position(-1, -1);
+                return new Item(-1, -1, item.itemName, item.playerId) { IsInQuest = item.IsInQuest } ;
             }
-            return new Position(x: itemPosition.x, y: newY );
+            return new Item(item.x, newY, item.itemName, item.playerId) { IsInQuest = item.IsInQuest }; 
         }
     }
 
-    private Position PushItemHorizontal(int index, Direction direction, Position itemPosition)
+    private Item PushItemHorizontal(int index, Direction direction, Item item)
     {
-        if (itemPosition.y != index || itemPosition.y < 0)
+        if (item.y != index || item.y < 0)
         {
-            return itemPosition;
+            return item;
         }
         else
         {
-            int newX = direction == Direction.RIGHT ? itemPosition.x + 1 : itemPosition.x - 1;
+            int newX = direction == Direction.RIGHT ? item.x + 1 : item.x - 1;
             if(newX < 0 || newX == Grid.Width)
             {
-                return new Position(-1, -1);
+                return new Item(-1, -1, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
             }
 
-            return new Position(x: newX , y: itemPosition.y);
+            return new Item(newX, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
         }
     }
     
@@ -506,28 +499,23 @@ class GameState
     public readonly Player me;
     public readonly Player enemy;
 
-    public readonly Quest[] quests;
     public readonly Item[] items;
 
-    public GameState(Grid grid, Player me, Player enemy, Quest[] quests, Item[] items)
+    public GameState(Grid grid, Player me, Player enemy, Item[] items)
     {
         this.grid = grid;
         this.me = me;
         this.enemy = enemy;
-        this.quests = quests;
         this.items = items;
     }
 
-    public Item[] GetRevealedOnBoardItems(int playerId)
+    public Item[] GetItems(int playerId)
     {
-        var revealedItems = quests.Where(q => q.playerId == playerId).Select(x => x.itemName).ToHashSet();
-
         return items
-            .Where(item => item.playerId == playerId && 
-                            revealedItems.Contains(item.itemName) && 
-                            item.x >= 0)
+            .Where(item => item.playerId == playerId)
             .ToArray();
     }
+
 }
 
 class PushAI
@@ -559,7 +547,7 @@ class PushAI
         var me = gameState.me;
         var enemy = gameState.enemy;
 
-        var myItems = gameState.GetRevealedOnBoardItems(0);
+        var myItems = gameState.GetItems(playerId: 0);
         
         var myTile = me.tile;
 
@@ -582,8 +570,11 @@ class PushAI
 
                 //var newEnemyPosition = grid.PushPlayer(i, direction, enemy);
                 //var newEnemyItemPositions = enemyItems.Select(it => grid.PushItem(i, direction, it)).ToArray();
+                string newPositions = string.Join(",", newMyItemPositions.Select(x => x.ToString()));
 
-                foreach (var newNewItemPosition in newMyItemPositions)
+                //XmasRush.Debug($"new item positions:{newPositions}");
+
+                foreach (var newNewItemPosition in newMyItemPositions.Where(it => it.IsInQuest).ToArray())
                 {
                     if (newNewItemPosition.x >= 0)
                     {
@@ -602,7 +593,6 @@ class PushAI
                 }
             }
         }
-
         return bestPushCommand.ToString();
 
     }
@@ -634,39 +624,49 @@ class MoveAI
 
     public string ComputeCommand()
     {
-        var grid = gameState.grid;
         Position myPosition = gameState.me;
-        var myItems = gameState.GetRevealedOnBoardItems(0).OrderBy(it => it.DistanceTo(myPosition)).ToArray();
 
+        var grid = gameState.grid;
+        var myItems = gameState.GetItems(0);
         var maxMoveCount = 20;
         var directions = new List<Direction>();
-        var connectedItems = myItems
-               .Where(it => grid.ArePositionsConnected(it, myPosition))
-               .OrderBy(it => it.DistanceTo(myPosition))
-               .ToArray();
-
-        if (connectedItems.Length == 0)
-        {
-            return "PASS";
-        }
-
-        int currentConnectedItemIndex = 0;
-        while (directions.Count < maxMoveCount && currentConnectedItemIndex < connectedItems.Length)
+        
+        //Start with connected items in quest on board
+        var myConnectedItemsInQuest = myItems
+                .Where(it => it.IsInQuest == true && it.x >= 0 && grid.ArePositionsConnected(it, myPosition))
+                .ToList();
+        
+        while (directions.Count < maxMoveCount && myConnectedItemsInQuest.Count > 0)
         {
             var cameFrom = ComputeBFS(fromPosition: myPosition);
 
-            //Compute path to first connectedItems
-            var path = ComputePath(
-                from: new PointValue(myPosition),
-                goal: new PointValue(connectedItems[currentConnectedItemIndex]),
-                cameFrom: cameFrom);
+            //Closest item
+            PointValue[] shortestPath = new PointValue[100];
+            Item closestItem = null;
+            foreach (var item in myConnectedItemsInQuest)
+            {
+                var path = ComputePath(
+                    from: new PointValue(myPosition),
+                    goal: new PointValue(item),
+                    cameFrom: cameFrom);
+                if (path.Length < shortestPath.Length)
+                {
+                    shortestPath = path;
+                    closestItem = item;
+                }
+            }
+            
+            directions.AddRange(ComputeDirections(shortestPath));
 
-            directions.AddRange(ComputeDirections(path));
+            string txtDirections = string.Join(",", directions.Select(d => d.ToString()).ToArray());
+            XmasRush.Debug($"Iteration {txtDirections}");
 
-            myPosition = connectedItems[currentConnectedItemIndex];
-            currentConnectedItemIndex++;
+            var collectedItemPosition = shortestPath.Last();
+            myConnectedItemsInQuest.Remove(closestItem);
+            myPosition = new Position(collectedItemPosition.x, collectedItemPosition.y);
+
         }
-
+        
         //XmasRush.Debug($"Move length:{directions.Count.ToString()}");
 
         if (directions.Count > 0)
@@ -680,6 +680,7 @@ class MoveAI
             return "PASS";
         }
     }
+
 
     private IReadOnlyList<Direction> ComputeDirections(PointValue[] path)
     {
@@ -813,8 +814,7 @@ class XmasRush
 
                 players[i] = new Player(i, playerX, playerY, new Tile(playerTile));
             }
-
-
+            
             int numItems = int.Parse(Console.ReadLine()); // the total number of items available on board and on player tiles
             Item[] items = new Item[numItems];
 
@@ -830,11 +830,8 @@ class XmasRush
 
                 items[i] = new Item(itemX, itemY, itemName, itemPlayerId);
             }
-
-
+            
             int numQuests = int.Parse(Console.ReadLine()); // the total number of revealed quests for both players
-            Quest[] quests = new Quest[numQuests];
-
             for (int i = 0; i < numQuests; i++)
             {
                 string line = Console.ReadLine();
@@ -842,10 +839,13 @@ class XmasRush
                 inputs = line.Split(' ');
                 string questItemName = inputs[0];
                 int questPlayerId = int.Parse(inputs[1]);
-                quests[i] = new Quest(questItemName, questPlayerId);
+
+                items.Single(it => it.itemName == questItemName && it.playerId == questPlayerId).IsInQuest = true;
             }
 
-            GameState gameState = new GameState(grid, players[0], players[1], quests, items);
+            Stopwatch watch = Stopwatch.StartNew();
+
+            GameState gameState = new GameState(grid, players[0], players[1], items);
 
             // Write an action using Console.WriteLine()
             // To debug: Console.Error.WriteLine("Debug messages...");
@@ -854,14 +854,15 @@ class XmasRush
                 //Push turn
                 PushAI pushAi = new PushAI(gameState);
                 Console.WriteLine(pushAi.ComputeCommand()); // PUSH <id> <direction> | MOVE <direction> | PASS
+                XmasRush.Debug($"PushAI {watch.ElapsedMilliseconds.ToString()} ms");
             }
             else
             {
                 //Move turn
                 MoveAI moveAI = new MoveAI(gameState);
                 Console.WriteLine(moveAI.ComputeCommand());
+                XmasRush.Debug($"MoveAI {watch.ElapsedMilliseconds.ToString()} ms");
             }
-
         }
     }
 }
