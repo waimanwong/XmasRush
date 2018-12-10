@@ -79,6 +79,11 @@ public class Player : Position
         this.id = player.id;
         this.tile = player.tile;
     }
+
+    public override string ToString()
+    {
+        return $"Player={id.ToString()} ({x},{y}) has tile {tile.ToString()}";
+    }
 }
 
 public class Item : Position
@@ -94,7 +99,10 @@ public class Item : Position
         this.playerId = playerId;
     }
 
-    
+    public override string ToString()
+    {
+        return $"{itemName} ({x},{y})";
+    }
 }
 
 public struct Tile
@@ -189,7 +197,7 @@ public class Grid
     public static int Width = 7;
     public static int Heigth = 7;
 
-    private readonly Tile[][] _tiles;
+    public readonly Tile[][] tiles;
 
     private readonly List<CellSet> _cellsets;
 
@@ -199,11 +207,11 @@ public class Grid
 
     public Grid()
     {
-        _tiles = new Tile[Width][];
+        tiles = new Tile[Width][];
 
         for (int x = 0; x < Width; x++)
         {
-            _tiles[x] = new Tile[Heigth];
+            tiles[x] = new Tile[Heigth];
         }
 
         _cellsets = new List<CellSet>(Grid.Width * Grid.Heigth);
@@ -217,7 +225,7 @@ public class Grid
         {
             for(int x = 0; x < Grid.Width; x++)
             {
-                sb.Append(_tiles[x][y].ToString());
+                sb.Append(tiles[x][y].ToString());
                 sb.Append("|");
             }
             sb.AppendLine();
@@ -228,7 +236,7 @@ public class Grid
 
     public void AddTile(int x, int y, Tile tile)
     {
-        _tiles[x][y] = tile;
+        tiles[x][y] = tile;
 
         var cell = new Cell(x, y);
         MakeSet(cell);
@@ -236,7 +244,7 @@ public class Grid
         if (x != 0)
         {
             //Check left connection
-            if (this._tiles[x][y].IsOpenedTo(Direction.LEFT) && this._tiles[x - 1][y].IsOpenedTo(Direction.RIGHT))
+            if (this.tiles[x][y].IsOpenedTo(Direction.LEFT) && this.tiles[x - 1][y].IsOpenedTo(Direction.RIGHT))
             {
                 CellSet c1 = FindSet(new Cell(x, y));
                 CellSet c2 = FindSet(new Cell(x - 1, y));
@@ -251,7 +259,7 @@ public class Grid
         if (y != 0)
         {
             //Check top connection
-            if (this._tiles[x][y].IsOpenedTo(Direction.UP) && this._tiles[x][y - 1].IsOpenedTo(Direction.DOWN))
+            if (this.tiles[x][y].IsOpenedTo(Direction.UP) && this.tiles[x][y - 1].IsOpenedTo(Direction.DOWN))
             {
                 CellSet c1 = FindSet(new Cell(x, y));
                 CellSet c2 = FindSet(new Cell(x, y - 1));
@@ -294,7 +302,7 @@ public class Grid
     public IReadOnlyList<Position> GetConnectedNeighbors(Position from)
     {
         var connectedNeighbors = new List<Position>();
-        var fromTile = _tiles[from.x][from.y];
+        var fromTile = tiles[from.x][from.y];
 
         foreach (var direction in AllDirections)
         {
@@ -303,7 +311,7 @@ public class Grid
                 var neighborPosition = from.GetSibling(direction);
                 if (this.PositionIsValid(neighborPosition))
                 {
-                    var neighborTile = _tiles[neighborPosition.x][neighborPosition.y];
+                    var neighborTile = tiles[neighborPosition.x][neighborPosition.y];
                     var oppositeDirection = (Direction)(((int)direction + 2) % 4);
                     if(neighborTile.IsOpenedTo(oppositeDirection))
                     {
@@ -347,9 +355,14 @@ public class Grid
 
     private Item PushItemVertical(int index, Direction direction, Item item)
     {
-        if (item.x != index || item.x < 0 )
+        if (item.x != index )
         {
-            return item;
+            return new Item(item.x, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+        }
+        else if ( item.x < 0)
+        {
+            int newY = direction == Direction.DOWN ? 0 : Grid.Heigth - 1;
+            return new Item(item.x, newY, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
         }
         else
         {
@@ -364,9 +377,14 @@ public class Grid
 
     private Item PushItemHorizontal(int index, Direction direction, Item item)
     {
-        if (item.y != index || item.y < 0)
+        if (item.y != index )
         {
-            return item;
+            return new Item(item.x, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+        }
+        else if (item.y < 0)
+        {
+            int newX = direction == Direction.RIGHT ? 0 : Grid.Width - 1;
+            return new Item(newX, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
         }
         else
         {
@@ -443,7 +461,7 @@ public class Grid
             {
                 for(int x = 0; x < Grid.Width; x++)
                 {
-                    newGrid.AddTile(x, y, this._tiles[x][y]);
+                    newGrid.AddTile(x, y, this.tiles[x][y]);
                 }
             }
             else
@@ -453,19 +471,19 @@ public class Grid
                     int x = 0;
                     for(; x < Grid.Width - 1;  x++)
                     {
-                        newGrid.AddTile(x, y, this._tiles[x + 1][y]);
+                        newGrid.AddTile(x, y, this.tiles[x + 1][y]);
                     }
                     newGrid.AddTile(x, y, tile);
-                    outputTile = this._tiles[0][y];
+                    outputTile = this.tiles[0][y];
                 }
                 else if(direction == Direction.RIGHT)
                 {
                     newGrid.AddTile(0, y, tile);
                     for (int x = 1; x < Grid.Width; x++)
                     {
-                        newGrid.AddTile(x, y, this._tiles[x - 1][y]);
+                        newGrid.AddTile(x, y, this.tiles[x - 1][y]);
                     }
-                    outputTile = this._tiles[Grid.Width - 1][y];
+                    outputTile = this.tiles[Grid.Width - 1][y];
                 }
                 else
                 {
@@ -487,7 +505,7 @@ public class Grid
             {
                 if (x != index)
                 {
-                    newGrid.AddTile(x, y, this._tiles[x][y]);
+                    newGrid.AddTile(x, y, this.tiles[x][y]);
                 }
                 else
                 {
@@ -499,9 +517,9 @@ public class Grid
                         }
                         else
                         {
-                            newGrid.AddTile(x, y, this._tiles[x][y-1]);
+                            newGrid.AddTile(x, y, this.tiles[x][y-1]);
                         }
-                        outputTile = this._tiles[x][Grid.Heigth - 1];
+                        outputTile = this.tiles[x][Grid.Heigth - 1];
                     }
                     else if (direction == Direction.UP)
                     {
@@ -511,9 +529,9 @@ public class Grid
                         }
                         else
                         {
-                            newGrid.AddTile(x, y, this._tiles[x][y + 1]);
+                            newGrid.AddTile(x, y, this.tiles[x][y + 1]);
                         }
-                        outputTile = this._tiles[x][0];
+                        outputTile = this.tiles[x][0];
                     }
                     else
                     {
@@ -550,29 +568,74 @@ public class GameState
             .Where(item => item.playerId == playerId)
             .ToArray();
     }
-
     
+    public GameState Evaluate(PushCommand pushCommand)
+    {
+        var index = pushCommand.index;
+        var direction = pushCommand.direction;
+        var myTile = this.me.tile;
 
+        var newGridAndOutputTile = grid.Push(index, direction, myTile);
+        var newGrid = newGridAndOutputTile.Item1;
+        var newPlayerTile = newGridAndOutputTile.Item2;
+        var newMe = grid.PushPlayer(index, direction, this.me, newPlayerTile);
+        var newEnemy = grid.PushPlayer(index, direction, this.enemy, this.enemy.tile);
+        var newItems = this.items.Select(it => grid.PushItem(index, direction, it)).ToArray();
+
+        return new GameState(newGrid, newMe, newEnemy, newItems);
+        
+    }
+    
+    public int ComputeScore()
+    {
+        int score = 0;
+        Item[] myItems = items.Where(it => it.playerId == 0).ToArray();
+        
+        foreach (var item in myItems.Where(it => it.IsInQuest).ToArray())
+        {
+            if (item.x >= 0)
+            {
+                if (grid.ArePositionsConnected(this.me, item))
+                {
+                    XmasRush.Debug($"{item.ToString()} is connected");
+                    score += 2000;
+                }
+            }
+            else
+            {
+                score += 2500;
+            }
+        }
+
+        foreach (var it in myItems)
+        {
+            score -= it.DistanceTo(this.me);
+        }
+
+        return score;
+    }
+}
+
+public struct PushCommand
+{
+    public int index;
+    public Direction direction;
+    public PushCommand(int index, Direction direction)
+    {
+        this.index = index;
+        this.direction = direction;
+    }
+
+    public override string ToString()
+    {
+        return $"PUSH {index.ToString()} {direction.ToString()}";
+    }
 }
 
 public class PushAI
 {
     private readonly GameState gameState;
-    private struct PushCommand
-    {
-        public int index;
-        public Direction direction;
-        public PushCommand(int index, Direction direction)
-        {
-            this.index = index;
-            this.direction = direction;
-        }
 
-        public override string ToString()
-        {
-            return $"PUSH {index.ToString()} {direction.ToString()}";
-        }
-    }
     public PushAI(GameState gameState)
     {
         this.gameState = gameState;
@@ -583,56 +646,48 @@ public class PushAI
         var grid = gameState.grid;
         var me = gameState.me;
         var enemy = gameState.enemy;
-
         var myItems = gameState.GetItems(playerId: 0);
-        
         var myTile = me.tile;
 
         int bestScore = 0;
+
         Random rand = new Random();
-        PushCommand bestPushCommand = new PushCommand(rand.Next(0, 6), (Direction)rand.Next(0,4));
-        
-        for (int i = 0; i < 7; i++)
+        PushCommand bestPushCommand = new PushCommand(rand.Next(0, 6), (Direction)rand.Next(0, 4));
+
+        List<PushCommand> pushCommands = ComputeAllPossibleCommands();
+
+        foreach(var pushCommand1 in pushCommands)
         {
-            foreach(var direction in Grid.AllDirections)
+            var newGameState1 = gameState.Evaluate(pushCommand1);
+            var score = newGameState1.ComputeScore();
+            XmasRush.Debug("****************************************");
+            XmasRush.Debug($"{pushCommand1.ToString()}: score: {score.ToString()}");
+            XmasRush.Debug($"{newGameState1.me.ToString() }");
+                 
+            if (score > bestScore)
             {
-                PushCommand commandUnderTest = new PushCommand(i, direction);
-                int score = 0;
-
-                //XmasRush.Debug($"Testing {commandUnderTest.ToString()}");
-
-                var newGridAndOutputTile = grid.Push(i, direction, myTile);
-                var newGrid = newGridAndOutputTile.Item1;
-                var newMyPlayerPosition = grid.PushPlayer(i, direction, me, newGridAndOutputTile.Item2);
-                var newMyItemPositions = myItems.Select( it => grid.PushItem(i, direction, it)).ToArray();
-
-                //var newEnemyPosition = grid.PushPlayer(i, direction, enemy);
-                //var newEnemyItemPositions = enemyItems.Select(it => grid.PushItem(i, direction, it)).ToArray();
-                string newPositions = string.Join(",", newMyItemPositions.Select(x => x.ToString()));
-
-                //XmasRush.Debug($"new item positions:{newPositions}");
-
-                foreach (var newNewItemPosition in newMyItemPositions.Where(it => it.IsInQuest).ToArray())
-                {
-                    if (newNewItemPosition.x >= 0)
-                    {
-                        if (newGrid.ArePositionsConnected(newMyPlayerPosition, newNewItemPosition))
-                        {
-                            //XmasRush.Debug("Item connected");
-                            score += 1000;
-                        }
-                    }
-                }
-
-                if(score > bestScore)
-                {
-                    bestScore = score;
-                    bestPushCommand = commandUnderTest;
-                }
+                bestScore = score;
+                bestPushCommand = pushCommand1;
             }
         }
+
         return bestPushCommand.ToString();
 
+    }
+
+    private List<PushCommand> ComputeAllPossibleCommands()
+    {
+        List<PushCommand> commands = new List<PushCommand>();
+
+        for (int index = 0; index < 7; index++)
+        {
+            foreach (var direction in Grid.AllDirections)
+            {
+                commands.Add(new PushCommand(index, direction));
+            }
+        }
+
+        return commands;
     }
 }
 
@@ -673,12 +728,7 @@ public class MoveAI
 
         //Start with connected items in quest on board
         var myNewPosition = CollectItems(myPosition, grid, myItems, ref directions);
-
-
-
-
-        //XmasRush.Debug($"Move length:{directions.Count.ToString()}");
-
+        
         if (directions.Count > 0)
         {
             var moves = string.Join(" ", directions.Take(20).Select(x => x.ToString()));
@@ -834,7 +884,7 @@ public class XmasRush
             int turnType = int.Parse(Console.ReadLine());
 
             Grid grid = new Grid();
-
+            //XmasRush.Debug("Grid grid = new Grid();");
             for (int y = 0; y < 7; y++)
             {
                 inputs = Console.ReadLine().Split(' ');
@@ -843,6 +893,7 @@ public class XmasRush
                     string tile = inputs[x];
                     grid.AddTile(x, y, new Tile(tile));
 
+                    //XmasRush.Debug($@"grid.AddTile({x}, {y}, new Tile(""{tile}""));");
                 }
             }
 
