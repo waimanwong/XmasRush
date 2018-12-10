@@ -600,6 +600,8 @@ class PushAI
 
 class MoveAI
 {
+    private const int MaxMoveCount = 20;
+
     private struct PointValue
     {
         public int x;
@@ -628,15 +630,36 @@ class MoveAI
 
         var grid = gameState.grid;
         var myItems = gameState.GetItems(0);
-        var maxMoveCount = 20;
+        
         var directions = new List<Direction>();
-        
+
         //Start with connected items in quest on board
+        var myNewPosition = CollectItems(myPosition, grid, myItems, ref directions);
+
+
+
+
+        //XmasRush.Debug($"Move length:{directions.Count.ToString()}");
+
+        if (directions.Count > 0)
+        {
+            var moves = string.Join(" ", directions.Take(20).Select(x => x.ToString()));
+
+            return $"MOVE {moves}";
+        }
+        else
+        {
+            return "PASS";
+        }
+    }
+
+    private Position CollectItems(Position myPosition, Grid grid, Item[] myItems, ref  List<Direction> directions)
+    {
         var myConnectedItemsInQuest = myItems
-                .Where(it => it.IsInQuest == true && it.x >= 0 && grid.ArePositionsConnected(it, myPosition))
-                .ToList();
-        
-        while (directions.Count < maxMoveCount && myConnectedItemsInQuest.Count > 0)
+                        .Where(it => it.IsInQuest == true && it.x >= 0 && grid.ArePositionsConnected(it, myPosition))
+                        .ToList();
+
+        while (directions.Count < MaxMoveCount && myConnectedItemsInQuest.Count > 0)
         {
             var cameFrom = ComputeBFS(fromPosition: myPosition);
 
@@ -655,32 +678,16 @@ class MoveAI
                     closestItem = item;
                 }
             }
-            
+
             directions.AddRange(ComputeDirections(shortestPath));
-
-            string txtDirections = string.Join(",", directions.Select(d => d.ToString()).ToArray());
-            XmasRush.Debug($"Iteration {txtDirections}");
-
+            
             var collectedItemPosition = shortestPath.Last();
             myConnectedItemsInQuest.Remove(closestItem);
             myPosition = new Position(collectedItemPosition.x, collectedItemPosition.y);
-
         }
-        
-        //XmasRush.Debug($"Move length:{directions.Count.ToString()}");
 
-        if (directions.Count > 0)
-        {
-            var moves = string.Join(" ", directions.Take(20).Select(x => x.ToString()));
-
-            return $"MOVE {moves}";
-        }
-        else
-        {
-            return "PASS";
-        }
+        return myPosition;
     }
-
 
     private IReadOnlyList<Direction> ComputeDirections(PointValue[] path)
     {
