@@ -101,7 +101,7 @@ public class Item : Position
 
     public override string ToString()
     {
-        return $"{itemName} ({x},{y})";
+        return $"{itemName}[player{playerId.ToString()}] ({x},{y}) IsInQuest={IsInQuest.ToString()}";
     }
 }
 
@@ -355,14 +355,14 @@ public class Grid
 
     private Item PushItemVertical(int index, Direction direction, Item item)
     {
-        if (item.x != index )
-        {
-            return new Item(item.x, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
-        }
-        else if ( item.x < 0)
+        if (item.x < 0)
         {
             int newY = direction == Direction.DOWN ? 0 : Grid.Heigth - 1;
-            return new Item(item.x, newY, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+            return new Item(index, newY, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+        }
+        else if (item.x != index )
+        {
+            return new Item(item.x, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
         }
         else
         {
@@ -377,14 +377,14 @@ public class Grid
 
     private Item PushItemHorizontal(int index, Direction direction, Item item)
     {
-        if (item.y != index )
-        {
-            return new Item(item.x, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
-        }
-        else if (item.y < 0)
+        if (item.y < 0)
         {
             int newX = direction == Direction.RIGHT ? 0 : Grid.Width - 1;
-            return new Item(newX, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+            return new Item(newX, index, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+        }
+        else if (item.y != index )
+        {
+            return new Item(item.x, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
         }
         else
         {
@@ -581,12 +581,12 @@ public class GameState
         var newMe = grid.PushPlayer(index, direction, this.me, newPlayerTile);
         var newEnemy = grid.PushPlayer(index, direction, this.enemy, this.enemy.tile);
         var newItems = this.items.Select(it => grid.PushItem(index, direction, it)).ToArray();
-
+        
         return new GameState(newGrid, newMe, newEnemy, newItems);
         
     }
     
-    public int ComputeScore()
+    public int ComputeScore(GameState oldState)
     {
         int score = 0;
         Item[] myItems = items.Where(it => it.playerId == 0).ToArray();
@@ -597,19 +597,20 @@ public class GameState
             {
                 if (grid.ArePositionsConnected(this.me, item))
                 {
-                    XmasRush.Debug($"{item.ToString()} is connected");
                     score += 2000;
                 }
             }
-            else
+            if(item.x < 0)
             {
-                score += 2500;
-            }
-        }
+                score += 1000;
 
-        foreach (var it in myItems)
-        {
-            score -= it.DistanceTo(this.me);
+                var oldStateItem = oldState.items.Single(it => it.itemName == item.itemName && it.playerId == 0);
+                var oldMe = oldState.me;
+                var distance = oldStateItem.DistanceTo(oldMe);
+
+                score += distance;
+
+            }
         }
 
         return score;
@@ -658,11 +659,12 @@ public class PushAI
 
         foreach(var pushCommand1 in pushCommands)
         {
+            //XmasRush.Debug("****************************************");
+            //XmasRush.Debug($"Evaluate {pushCommand1.ToString()}");
+
             var newGameState1 = gameState.Evaluate(pushCommand1);
-            var score = newGameState1.ComputeScore();
-            XmasRush.Debug("****************************************");
-            XmasRush.Debug($"{pushCommand1.ToString()}: score: {score.ToString()}");
-            XmasRush.Debug($"{newGameState1.me.ToString() }");
+            var score = newGameState1.ComputeScore(gameState);
+            //XmasRush.Debug($"score: {score.ToString()}");
                  
             if (score > bestScore)
             {
@@ -951,14 +953,14 @@ public class XmasRush
                 //Push turn
                 PushAI pushAi = new PushAI(gameState);
                 Console.WriteLine(pushAi.ComputeCommand()); // PUSH <id> <direction> | MOVE <direction> | PASS
-                XmasRush.Debug($"PushAI {watch.ElapsedMilliseconds.ToString()} ms");
+                //XmasRush.Debug($"PushAI {watch.ElapsedMilliseconds.ToString()} ms");
             }
             else
             {
                 //Move turn
                 MoveAI moveAI = new MoveAI(gameState);
                 Console.WriteLine(moveAI.ComputeCommand());
-                XmasRush.Debug($"MoveAI {watch.ElapsedMilliseconds.ToString()} ms");
+                //XmasRush.Debug($"MoveAI {watch.ElapsedMilliseconds.ToString()} ms");
             }
         }
     }
