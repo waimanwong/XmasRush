@@ -77,8 +77,7 @@ namespace XmasRush.Tests
 
             //Assert
             outputTile.Should().Be(new Tile("1010"));
-
-
+            
         }
     }
 }
