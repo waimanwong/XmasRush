@@ -2,11 +2,12 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 /**
- * Help the Christmas elves fetch presents in a magical labyrinth!
- **/
+* Help the Christmas elves fetch presents in a magical labyrinth!
+**/
 
-class Position
+public class Position
 {
     public int x;
     public int y;
@@ -54,7 +55,7 @@ class Position
     }
 }
 
-enum Direction
+public enum Direction
 {
     UP = 0,
     RIGHT = 1,
@@ -62,19 +63,25 @@ enum Direction
     LEFT = 3,
 }
 
-class Player : Position
+public class Player : Position
 {
-    private readonly int id;
+    public readonly int id;
     public readonly Tile tile;
-
+    
     public Player(int id, int x, int y, Tile tile) : base(x, y)
     {
         this.id = id;
         this.tile = tile;
     }
+
+    public Player(Player player) : base(player.x, player.y)
+    {
+        this.id = player.id;
+        this.tile = player.tile;
+    }
 }
 
-class Item : Position
+public class Item : Position
 {
     public readonly string itemName;
     public readonly int playerId;
@@ -90,7 +97,7 @@ class Item : Position
     
 }
 
-struct Tile
+public struct Tile
 {
     private readonly string _directions;
     public Tile(string tile)
@@ -102,9 +109,14 @@ struct Tile
     {
         return _directions[(int)direction] == '1';
     }
+
+    public override string ToString()
+    {
+        return _directions;
+    }
 }
 
-class Grid
+public class Grid
 {
     private struct Cell
     {
@@ -195,6 +207,23 @@ class Grid
         }
 
         _cellsets = new List<CellSet>(Grid.Width * Grid.Heigth);
+    }
+
+    public override string ToString()
+    {
+        StringBuilder sb = new StringBuilder();
+
+        for(int y = 0; y < Grid.Heigth; y++)
+        {
+            for(int x = 0; x < Grid.Width; x++)
+            {
+                sb.Append(_tiles[x][y].ToString());
+                sb.Append("|");
+            }
+            sb.AppendLine();
+            sb.AppendLine(new string('-', 4 * Grid.Width));
+        }
+        return sb.ToString();
     }
 
     public void AddTile(int x, int y, Tile tile)
@@ -300,7 +329,7 @@ class Grid
         }
     }
 
-    public Grid Push(int index, Direction direction, Tile tile)
+    public Tuple<Grid, Tile> Push(int index, Direction direction, Tile tile)
     {
         if (direction == Direction.LEFT || direction == Direction.RIGHT)
             return PushHorizontal(index, direction, tile);
@@ -351,23 +380,23 @@ class Grid
         }
     }
     
-    public Position PushPlayer(int index, Direction direction, Position playerPosition)
+    public Player PushPlayer(int index, Direction direction, Player player, Tile playerTile)
     {
         if (direction == Direction.LEFT || direction == Direction.RIGHT)
-            return PushPlayerHorizontal(index, direction, playerPosition);
+            return PushPlayerHorizontal(index, direction, player, playerTile);
         else
-            return PushPlayerVertical(index, direction, playerPosition);
+            return PushPlayerVertical(index, direction, player, playerTile);
     }
 
-    private Position PushPlayerVertical(int index, Direction direction, Position playerPosition)
+    private Player PushPlayerVertical(int index, Direction direction, Player player, Tile playerTile)
     {
-        if(playerPosition.x != index)
+        if(player.x != index)
         {
-            return playerPosition;
+            return new Player(player);
         }
         else
         {
-            int newY = direction == Direction.DOWN ? playerPosition.y + 1 : playerPosition.y - 1;
+            int newY = direction == Direction.DOWN ? player.y + 1 : player.y - 1;
 
             if(newY < 0)
             {
@@ -378,19 +407,19 @@ class Grid
                 newY = 0;
             }
 
-            return new Position(x: playerPosition.x, y: newY);
+            return new Player(player.id, player.x, newY, playerTile);
         }
     }
 
-    private Position PushPlayerHorizontal(int index, Direction direction, Position playerPosition)
+    private Player PushPlayerHorizontal(int index, Direction direction, Player player, Tile playerTile)
     {
-        if(playerPosition.y != index)
+        if(player.y != index)
         {
-            return playerPosition;
+            return new Player(player);
         }
         else
         {
-            int newX = direction == Direction.RIGHT ? playerPosition.x + 1 : playerPosition.x - 1;
+            int newX = direction == Direction.RIGHT ? player.x + 1 : player.x - 1;
             if(newX < 0)
             {
                 newX = Grid.Width - 1;
@@ -399,15 +428,16 @@ class Grid
             {
                 newX = 0;
             }
-            return new Position(x: newX, y: playerPosition.y);
+            return new Player(player.id, newX, player.y, playerTile);
         }
     }
 
-    private Grid PushHorizontal(int index, Direction direction, Tile tile)
+    private Tuple<Grid,Tile> PushHorizontal(int index, Direction direction, Tile tile)
     {
         Grid newGrid = new Grid();
+        Tile? outputTile = null;
 
-        for(int y = 0; y < Grid.Heigth; y++)
+        for (int y = 0; y < Grid.Heigth; y++)
         {
             if(y != index)
             {
@@ -426,6 +456,7 @@ class Grid
                         newGrid.AddTile(x, y, this._tiles[x + 1][y]);
                     }
                     newGrid.AddTile(x, y, tile);
+                    outputTile = this._tiles[0][y];
                 }
                 else if(direction == Direction.RIGHT)
                 {
@@ -434,6 +465,7 @@ class Grid
                     {
                         newGrid.AddTile(x, y, this._tiles[x - 1][y]);
                     }
+                    outputTile = this._tiles[Grid.Width - 1][y];
                 }
                 else
                 {
@@ -441,12 +473,13 @@ class Grid
                 }
             }
         }
-        return newGrid;
+        return new Tuple<Grid, Tile>( newGrid, outputTile.Value);
     }
 
-    private Grid PushVertical(int index, Direction direction, Tile tile)
+    private Tuple<Grid, Tile> PushVertical(int index, Direction direction, Tile tile)
     {
         Grid newGrid = new Grid();
+        Tile? outputTile = null;
 
         for(int y = 0; y < Grid.Heigth; y++)
         {
@@ -468,6 +501,7 @@ class Grid
                         {
                             newGrid.AddTile(x, y, this._tiles[x][y-1]);
                         }
+                        outputTile = this._tiles[x][Grid.Heigth - 1];
                     }
                     else if (direction == Direction.UP)
                     {
@@ -479,6 +513,7 @@ class Grid
                         {
                             newGrid.AddTile(x, y, this._tiles[x][y + 1]);
                         }
+                        outputTile = this._tiles[x][0];
                     }
                     else
                     {
@@ -488,11 +523,11 @@ class Grid
             }
         }
 
-        return newGrid;
+        return new Tuple<Grid, Tile>(newGrid, outputTile.Value);
     }
 }
 
-class GameState
+public class GameState
 {
     public readonly Grid grid;
 
@@ -516,9 +551,11 @@ class GameState
             .ToArray();
     }
 
+    
+
 }
 
-class PushAI
+public class PushAI
 {
     private readonly GameState gameState;
     private struct PushCommand
@@ -564,8 +601,9 @@ class PushAI
 
                 //XmasRush.Debug($"Testing {commandUnderTest.ToString()}");
 
-                var newGrid = grid.Push(i, direction, myTile);
-                var newMyPlayerPosition = grid.PushPlayer(i, direction, me);
+                var newGridAndOutputTile = grid.Push(i, direction, myTile);
+                var newGrid = newGridAndOutputTile.Item1;
+                var newMyPlayerPosition = grid.PushPlayer(i, direction, me, newGridAndOutputTile.Item2);
                 var newMyItemPositions = myItems.Select( it => grid.PushItem(i, direction, it)).ToArray();
 
                 //var newEnemyPosition = grid.PushPlayer(i, direction, enemy);
@@ -598,7 +636,7 @@ class PushAI
     }
 }
 
-class MoveAI
+public class MoveAI
 {
     private const int MaxMoveCount = 20;
 
@@ -779,7 +817,7 @@ class MoveAI
 
 }
 
-class XmasRush
+public class XmasRush
 {
     public static void Debug(string message)
     {
@@ -804,6 +842,7 @@ class XmasRush
                 {
                     string tile = inputs[x];
                     grid.AddTile(x, y, new Tile(tile));
+
                 }
             }
 
