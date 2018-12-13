@@ -605,7 +605,7 @@ public class GameState
             {
                 if (grid.ArePositionsConnected(this.me, item))
                 {
-                    // XmasRush.Debug($"Me: {this.me.ToString()} and item: {item.ToString()}");
+                    //XmasRush.Debug($"Me: {this.me.ToString()} and item: {item.ToString()}");
                     score += 2000;
                 }
             }
@@ -741,12 +741,6 @@ public class MoveAI
         //Start with connected items in quest on board
         var myNewPosition = CollectItems(myPosition, grid, myItems, ref directions);
 
-        //Remaining moves ?
-        if (directions.Count < MaxMoveCount)
-        {
-            //ComputePathToBorder(myNewPosition, grid, ref directions);
-        }
-
 
         if (directions.Count > 0)
         {
@@ -758,30 +752,6 @@ public class MoveAI
         {
             return "PASS";
         }
-    }
-
-    private void ComputePathToBorder(Position myNewPosition, Grid grid, ref List<Direction> directions)
-    {
-        var cameFrom = ComputeBFS(fromPosition: myNewPosition);
-        var closestPointToBorder = cameFrom.First().Key;
-        var smallestDistanceToBorder = int.MaxValue;
-
-        foreach (var kvp in cameFrom)
-        {
-            var point = kvp.Key;
-            var distanceToBorder = grid.DistanceToClosestBorder(point.x, point.y);
-            if (distanceToBorder < smallestDistanceToBorder)
-            {
-                closestPointToBorder = point;
-            }
-        }
-
-        var pathTowardsBorder = ComputePath(
-                from: new PointValue(myNewPosition),
-                goal: closestPointToBorder,
-                cameFrom: cameFrom);
-
-        directions.AddRange(ComputeDirections(pathTowardsBorder));
     }
 
     private Position CollectItems(Position myPosition, Grid grid, Item[] myItems, ref List<Direction> directions)
