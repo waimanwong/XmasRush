@@ -744,10 +744,10 @@ public class MoveAI
 
         //Start with connected items in quest on board
         var myNewPosition = CollectItems(myPosition, grid, myItems, ref directions);
-        
-        if(directions.Count < MoveAI.MaxMoveCount)
+
+        if (directions.Count < MoveAI.MaxMoveCount)
         {
-            MoveToGridBorder( myNewPosition, ref directions );
+            MoveToGridBorder(myNewPosition, ref directions);
         }
 
         if (directions.Count > 0)
@@ -762,7 +762,7 @@ public class MoveAI
         }
     }
 
-    private void MoveToGridBorder( Position myNewPosition, ref List<Direction> directions)
+    private void MoveToGridBorder(Position myNewPosition, ref List<Direction> directions)
     {
         var cameFrom = ComputeBFS(fromPosition: myNewPosition);
         var targetPosition = cameFrom.OrderByDescending(kvp => kvp.Key.DistanceTo(Grid.Center.x, Grid.Center.y)).First();
