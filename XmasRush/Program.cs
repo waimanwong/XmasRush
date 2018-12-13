@@ -197,6 +197,8 @@ public class Grid
     public static int Width = 7;
     public static int Heigth = 7;
 
+    public static Position Center = new Position(3, 3);
+
     public readonly Tile[][] tiles;
 
     private readonly List<CellSet> _cellsets;
@@ -607,18 +609,15 @@ public class GameState
                 {
                     //XmasRush.Debug($"Me: {this.me.ToString()} and item: {item.ToString()}");
                     score += 2000;
+                    score += (20 - this.me.DistanceTo(item));
                 }
+
+                score += item.DistanceTo(Grid.Center);
+
             }
             if (item.x < 0)
             {
                 score += 1000;
-
-                var oldStateItem = oldState.items.Single(it => it.itemName == item.itemName && it.playerId == 0);
-                var oldMe = oldState.me;
-                var distance = oldStateItem.DistanceTo(oldMe);
-
-                score += distance;
-
             }
         }
 
@@ -720,6 +719,11 @@ public class MoveAI
         {
             return other.x == this.x && other.y == this.y;
         }
+
+        public int DistanceTo(int x, int y)
+        {
+            return Math.Abs(this.x - x) + Math.Abs(this.y - y);
+        }
     }
 
     private readonly GameState gameState;
@@ -740,11 +744,15 @@ public class MoveAI
 
         //Start with connected items in quest on board
         var myNewPosition = CollectItems(myPosition, grid, myItems, ref directions);
-
+        
+        if(directions.Count < MoveAI.MaxMoveCount)
+        {
+            MoveToGridBorder( myNewPosition, ref directions );
+        }
 
         if (directions.Count > 0)
         {
-            var moves = string.Join(" ", directions.Take(20).Select(x => x.ToString()));
+            var moves = string.Join(" ", directions.Take(MoveAI.MaxMoveCount).Select(x => x.ToString()));
 
             return $"MOVE {moves}";
         }
@@ -752,6 +760,18 @@ public class MoveAI
         {
             return "PASS";
         }
+    }
+
+    private void MoveToGridBorder( Position myNewPosition, ref List<Direction> directions)
+    {
+        var cameFrom = ComputeBFS(fromPosition: myNewPosition);
+        var targetPosition = cameFrom.OrderByDescending(kvp => kvp.Key.DistanceTo(Grid.Center.x, Grid.Center.y)).First();
+        var path = ComputePath(
+            from: new PointValue(myNewPosition),
+            goal: targetPosition.Key,
+            cameFrom: cameFrom);
+
+        directions.AddRange(ComputeDirections(path));
     }
 
     private Position CollectItems(Position myPosition, Grid grid, Item[] myItems, ref List<Direction> directions)
