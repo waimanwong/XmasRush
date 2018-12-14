@@ -5,7 +5,7 @@ VisualStudioVersion = 15.0.27703.2026
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XmasRush", "XmasRush\XmasRush.csproj", "{F93567BD-4364-40A7-862D-4B85C9037737}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XmasRush.Tests", "XmasRush.Tests\XmasRush.Tests.csproj", "{D5E09EDE-8281-4864-8DAA-E395C4C8632A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "XmasRush.Tests", "XmasRush.Tests\XmasRush.Tests.csproj", "{D5E09EDE-8281-4864-8DAA-E395C4C8632A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

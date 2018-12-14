@@ -126,49 +126,28 @@ public struct Tile
 
 public class Grid
 {
-    private struct Cell
-    {
-        public int x, y;
-
-        public Cell(int x, int y)
-        {
-            this.x = x;
-            this.y = y;
-        }
-
-        public int Id => this.x + (this.y * Grid.Width);
-
-        public override string ToString()
-        {
-            return $"({x.ToString()},{y.ToString()})";
-        }
-        public int DistanceTo(Cell otherCell)
-        {
-            return Math.Abs(otherCell.x - this.x) + Math.Abs(otherCell.y - this.y);
-        }
-    }
 
     private class CellSet
     {
-        public HashSet<Cell> cells;
+        public HashSet<int> cells;
         private CellSet()
         {
-            cells = new HashSet<Cell>();
+            cells = new HashSet<int>();
         }
 
-        public CellSet(Cell cell) : this()
+        public CellSet(int x, int y) : this()
         {
-            cells.Add(cell);
+            cells.Add(x + (y * Grid.Width));
         }
 
         public int GetId()
         {
-            return cells.Min(c => c.Id);
+            return cells.Min();
         }
 
-        public bool Contains(Cell cell)
+        public bool Contains(int x, int y)
         {
-            return cells.Contains(cell);
+            return cells.Contains(x + (y * Grid.Width));
         }
 
         public CellSet Union(CellSet otherSet)
@@ -239,17 +218,16 @@ public class Grid
     public void AddTile(int x, int y, Tile tile)
     {
         tiles[x][y] = tile;
-
-        var cell = new Cell(x, y);
-        MakeSet(cell);
+        
+        MakeSet(x, y);
 
         if (x != 0)
         {
             //Check left connection
             if (this.tiles[x][y].IsOpenedTo(Direction.LEFT) && this.tiles[x - 1][y].IsOpenedTo(Direction.RIGHT))
             {
-                CellSet c1 = FindSet(new Cell(x, y));
-                CellSet c2 = FindSet(new Cell(x - 1, y));
+                CellSet c1 = FindSet(x, y);
+                CellSet c2 = FindSet(x - 1, y);
 
                 if (c1.GetId() != c2.GetId())
                 {
@@ -263,8 +241,8 @@ public class Grid
             //Check top connection
             if (this.tiles[x][y].IsOpenedTo(Direction.UP) && this.tiles[x][y - 1].IsOpenedTo(Direction.DOWN))
             {
-                CellSet c1 = FindSet(new Cell(x, y));
-                CellSet c2 = FindSet(new Cell(x, y - 1));
+                CellSet c1 = FindSet(x, y);
+                CellSet c2 = FindSet(x, y - 1);
 
                 if (c1.GetId() != c2.GetId())
                 {
@@ -276,14 +254,12 @@ public class Grid
 
     public bool ArePositionsConnected(Position pos1, Position pos2)
     {
-        Cell c1 = new Cell(pos1.x, pos1.y);
-        Cell c2 = new Cell(pos2.x, pos2.y);
-        return FindSet(c1) == FindSet(c2);
+        return FindSet(pos1.x, pos1.y) == FindSet(pos2.x, pos2.y);
     }
 
-    private CellSet FindSet(Cell cell)
+    private CellSet FindSet(int x, int y)
     {
-        return _cellsets.Single(set => set.Contains(cell));
+        return _cellsets.Single(set => set.Contains(x,y));
     }
 
     private void Union(CellSet c1, CellSet c2)
@@ -296,9 +272,9 @@ public class Grid
         _cellsets.Add(newCellSet);
     }
 
-    private void MakeSet(Cell cell)
+    private void MakeSet(int x, int y)
     {
-        _cellsets.Add(new CellSet(cell));
+        _cellsets.Add(new CellSet(x,y));
     }
 
     public IReadOnlyList<Position> GetConnectedNeighbors(Position from)
@@ -599,6 +575,7 @@ public class GameState
     public int ComputeScore(GameState oldState)
     {
         int score = 0;
+
         Item[] myItems = items.Where(it => it.playerId == 0).ToArray();
 
         foreach (var item in myItems.Where(it => it.IsInQuest).ToArray())
