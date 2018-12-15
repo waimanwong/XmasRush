@@ -66,9 +66,9 @@ public enum Direction
 public class Player : Position
 {
     public readonly int id;
-    public readonly Tile tile;
+    public readonly string tile;
 
-    public Player(int id, int x, int y, Tile tile) : base(x, y)
+    public Player(int id, int x, int y, string tile) : base(x, y)
     {
         this.id = id;
         this.tile = tile;
@@ -105,32 +105,13 @@ public class Item : Position
     }
 }
 
-public struct Tile
-{
-    public readonly string directions;
-    public Tile(string tile)
-    {
-        directions = tile;
-    }
-
-    public bool IsOpenedTo(Direction direction)
-    {
-        return directions[(int)direction] == '1';
-    }
-
-    public override string ToString()
-    {
-        return directions;
-    }
-}
-
 public class Grid
 {
 
     private class CellSet
     {
-        public HashSet<int> cells;
-        private CellSet()
+        public  HashSet<int> cells;
+        public CellSet()
         {
             cells = new HashSet<int>();
         }
@@ -178,7 +159,7 @@ public class Grid
 
     public static Position Center = new Position(3, 3);
 
-    public readonly Tile[][] tiles;
+    public readonly string[][] tiles;
 
     private readonly List<CellSet> _cellsets;
 
@@ -191,11 +172,11 @@ public class Grid
 
     public Grid()
     {
-        tiles = new Tile[Width][];
+        tiles = new string[Width][];
 
         for (int x = 0; x < Width; x++)
         {
-            tiles[x] = new Tile[Heigth];
+            tiles[x] = new string[Heigth];
         }
 
         _cellsets = new List<CellSet>(Grid.Width * Grid.Heigth);
@@ -219,9 +200,9 @@ public class Grid
         return sb.ToString();
     }
 
-    public void AddTile(int x, int y, Tile tile)
+    public void AddTile(int x, int y, string tile)
     {
-        Hash.Append(tile.directions);
+        Hash.Append(tile);
 
         tiles[x][y] = tile;
         
@@ -230,7 +211,8 @@ public class Grid
         if (x != 0)
         {
             //Check left connection
-            if (this.tiles[x][y].IsOpenedTo(Direction.LEFT) && this.tiles[x - 1][y].IsOpenedTo(Direction.RIGHT))
+            if (this.tiles[x][y][(int)Direction.LEFT] == '1' && 
+                this.tiles[x - 1][y][(int)Direction.RIGHT] == '1')
             {
                 CellSet c1 = FindSet(x, y);
                 CellSet c2 = FindSet(x - 1, y);
@@ -245,7 +227,8 @@ public class Grid
         if (y != 0)
         {
             //Check top connection
-            if (this.tiles[x][y].IsOpenedTo(Direction.UP) && this.tiles[x][y - 1].IsOpenedTo(Direction.DOWN))
+            if (this.tiles[x][y][(int)Direction.UP] == '1' && 
+                this.tiles[x][y - 1][(int)Direction.DOWN] == '1')
             {
                 CellSet c1 = FindSet(x, y);
                 CellSet c2 = FindSet(x, y - 1);
@@ -295,14 +278,14 @@ public class Grid
 
         foreach (var direction in AllDirections)
         {
-            if (fromTile.IsOpenedTo(direction))
+            if (fromTile[(int)direction] == '1' )
             {
                 var neighborPosition = from.GetSibling(direction);
                 if (this.PositionIsValid(neighborPosition))
                 {
                     var neighborTile = tiles[neighborPosition.x][neighborPosition.y];
                     var oppositeDirection = (Direction)(((int)direction + 2) % 4);
-                    if (neighborTile.IsOpenedTo(oppositeDirection))
+                    if (neighborTile[(int)oppositeDirection] == '1')
                     {
                         connectedNeighbors.Add(neighborPosition);
                     }
@@ -318,14 +301,7 @@ public class Grid
                 0 <= position.y && position.y < Grid.Heigth;
     }
 
-    public Tuple<Grid, Tile> Push(int index, Direction direction, Tile tile)
-    {
-        if (direction == Direction.LEFT || direction == Direction.RIGHT)
-            return PushHorizontal(index, direction, tile);
-        else
-            return PushVertical(index, direction, tile);
-    }
-
+    
     public Item PushItem(int index, Direction direction, Item item)
     {
         if (direction == Direction.LEFT || direction == Direction.RIGHT)
@@ -379,7 +355,7 @@ public class Grid
         }
     }
 
-    public Player PushPlayer(int index, Direction direction, Player player, Tile playerTile)
+    public Player PushPlayer(int index, Direction direction, Player player, string playerTile)
     {
         if (direction == Direction.LEFT || direction == Direction.RIGHT)
             return PushPlayerHorizontal(index, direction, player, playerTile);
@@ -387,7 +363,7 @@ public class Grid
             return PushPlayerVertical(index, direction, player, playerTile);
     }
 
-    private Player PushPlayerVertical(int index, Direction direction, Player player, Tile playerTile)
+    private Player PushPlayerVertical(int index, Direction direction, Player player, string playerTile)
     {
         if (player.x != index)
         {
@@ -410,7 +386,7 @@ public class Grid
         }
     }
 
-    private Player PushPlayerHorizontal(int index, Direction direction, Player player, Tile playerTile)
+    private Player PushPlayerHorizontal(int index, Direction direction, Player player, string playerTile)
     {
         if (player.y != index)
         {
@@ -431,10 +407,18 @@ public class Grid
         }
     }
 
-    private Tuple<Grid, Tile> PushHorizontal(int index, Direction direction, Tile tile)
+    public Tuple<Grid, string> Push(int index, Direction direction, string tile)
+    {
+        if (direction == Direction.LEFT || direction == Direction.RIGHT)
+            return PushHorizontal(index, direction, tile);
+        else
+            return PushVertical(index, direction, tile);
+    }
+    
+    private Tuple<Grid, string> PushHorizontal(int index, Direction direction, string tile)
     {
         Grid newGrid = new Grid();
-        Tile? outputTile = null;
+        string outputTile = null;
 
         for (int y = 0; y < Grid.Heigth; y++)
         {
@@ -472,13 +456,13 @@ public class Grid
                 }
             }
         }
-        return new Tuple<Grid, Tile>(newGrid, outputTile.Value);
+        return new Tuple<Grid, string>(newGrid, outputTile);
     }
 
-    private Tuple<Grid, Tile> PushVertical(int index, Direction direction, Tile tile)
+    private Tuple<Grid, string> PushVertical(int index, Direction direction, string tile)
     {
         Grid newGrid = new Grid();
-        Tile? outputTile = null;
+        string outputTile = null;
 
         for (int y = 0; y < Grid.Heigth; y++)
         {
@@ -522,7 +506,7 @@ public class Grid
             }
         }
 
-        return new Tuple<Grid, Tile>(newGrid, outputTile.Value);
+        return new Tuple<Grid, string>(newGrid, outputTile);
     }
 
 }
@@ -915,7 +899,7 @@ public class XmasRush
                 for (int x = 0; x < 7; x++)
                 {
                     string tile = inputs[x];
-                    grid.AddTile(x, y, new Tile(tile));
+                    grid.AddTile(x, y, tile);
 
                     //XmasRush.Debug($@"grid.AddTile({x}, {y}, new Tile(""{tile}""));");
                 }
@@ -933,7 +917,7 @@ public class XmasRush
                 int playerY = int.Parse(inputs[2]);
                 string playerTile = inputs[3];
 
-                players[i] = new Player(i, playerX, playerY, new Tile(playerTile));
+                players[i] = new Player(i, playerX, playerY, playerTile);
             }
 
             int numItems = int.Parse(Console.ReadLine()); // the total number of items available on board and on player tiles
