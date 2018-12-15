@@ -631,42 +631,47 @@ public class PushAI
 
     public string ComputeCommand()
     {
-        var grid = gameState.grid;
-        var me = gameState.me;
-        var enemy = gameState.enemy;
-        var myItems = gameState.GetItems(playerId: 0);
-        var myTile = me.tile;
+        var watch = Stopwatch.StartNew();
+        
+        int bestScore = int.MinValue;
+        PushCommand bestPushCommand = new PushCommand(0, Direction.DOWN);
+        int simulations = 0;
+        var pushCommands = XmasRush.AllPushCommands;
 
-        int bestScore = 0;
-
-        Random rand = new Random();
-        PushCommand bestPushCommand = new PushCommand(rand.Next(0, 6), (Direction)rand.Next(0, 4));
-
-        PushCommand[] pushCommands = XmasRush.ComputeAllPossibleCommands().ToArray();
-
-        for(int i = 0; i < pushCommands.Length; i++)
+        for (int i = 0; i < pushCommands.Length && watch.ElapsedMilliseconds < 48; i++)
         {
-            var pushCommand1 = pushCommands[i];
-       
             //XmasRush.Debug("****************************************");
-            //XmasRush.Debug($"Evaluate {pushCommand1.ToString()}");
+            //XmasRush.Debug($"Evaluate {pushCommands[i].ToString()}");
 
-            var newGameState1 = gameState.RunCommand(pushCommand1);
-            var score = newGameState1.ComputeScore(gameState);
+            var newGameState1 = gameState.RunCommand(pushCommands[i]);
 
-            //XmasRush.Debug($"score: {score.ToString()}");
-
-            if (score > bestScore)
+            for (int j = 0; j < pushCommands.Length && watch.ElapsedMilliseconds < 48; j++)
             {
-                bestScore = score;
-                bestPushCommand = pushCommand1;
+                var newGameState2 = gameState.RunCommand(pushCommands[j]);
+
+                var score = newGameState2.ComputeScore(gameState);
+
+                //XmasRush.Debug($"score: {score.ToString()}");
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestPushCommand = pushCommands[i];
+                }
+
+                simulations++;
             }
         }
 
+        XmasRush.Debug($"Nb simulations = {simulations.ToString()} {watch.ElapsedMilliseconds.ToString()}ms");
+        
         return bestPushCommand.ToString();
-
     }
 
+    public PushCommand PickRandomPushCommand()
+    {
+        return XmasRush.AllPushCommands.OrderBy(p => Guid.NewGuid()).First();
+    }
     
 }
 
@@ -869,21 +874,21 @@ public class MoveAI
 
 public class XmasRush
 {
-    public static List<PushCommand> ComputeAllPossibleCommands()
+    public static PushCommand[] AllPushCommands = null;
+    
+    private static void ComputeAllPossibleCommands()
     {
-        List<PushCommand> commands = new List<PushCommand>();
-
+        List<PushCommand> commandList = new List<PushCommand>();
         for (int index = 0; index < 7; index++)
         {
             foreach (var direction in Grid.AllDirections)
             {
-                commands.Add(new PushCommand(index, direction));
+                commandList.Add(new PushCommand(index, direction));
             }
         }
-
-        return commands;
+        AllPushCommands = commandList.ToArray(); 
     }
-
+    
     public static void Debug(string message)
     {
         Console.Error.WriteLine(message);
@@ -894,6 +899,8 @@ public class XmasRush
         string[] inputs;
         GameState gameState = null;
         int turnCount = 1;
+
+        XmasRush.ComputeAllPossibleCommands();
 
         // game loop
         while (true)
