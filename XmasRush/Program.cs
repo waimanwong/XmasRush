@@ -651,13 +651,6 @@ public class PushAI
             //XmasRush.Debug("****************************************");
             //XmasRush.Debug($"Evaluate {pushCommand1.ToString()}");
 
-            if(i == 0)
-            {
-                var hash = GameStateStore.ComputeStoreHash(gameState, pushCommand1);
-                XmasRush.Debug(hash);
-                XmasRush.Debug($"found hash = {GameStateStore.HasState(gameState, pushCommand1)}");
-            }
-
             var newGameState1 = gameState.RunCommand(pushCommand1);
             var score = newGameState1.ComputeScore(gameState);
 
@@ -874,62 +867,6 @@ public class MoveAI
     }
 }
 
-public static class GameStateStore
-{
-    public static readonly Dictionary<string, GameState> store = new Dictionary<string, GameState>();
-
-    public static void InitializeStateStore(GameState gameState)
-    {
-        Stopwatch watch = Stopwatch.StartNew();
-
-        var allPossibleCommands = XmasRush.ComputeAllPossibleCommands();
-
-        Queue<GameState> toVisit = new Queue<GameState>();
-        toVisit.Enqueue(gameState);
-
-        Queue<string> hashes = new Queue<string>();
-
-        int maxDepth = 0;
-
-        while (toVisit.Count > 0 && watch.ElapsedMilliseconds < 950)
-        {
-            var curGameState = toVisit.Dequeue();
-
-            foreach (var command in allPossibleCommands)
-            {
-                var hash = ComputeStoreHash(curGameState, command);
-                if (store.ContainsKey(hash) == false)
-                {
-                    var newGameState = curGameState.RunCommand(command);
-                    hashes.Enqueue(hash);
-                    store.Add(hash, newGameState);
-
-                    if(maxDepth < newGameState.Depth)
-                    {
-                        maxDepth = newGameState.Depth;
-                    }
-
-                    toVisit.Enqueue(newGameState);
-                }
-            }
-        }
-        XmasRush.Debug($"Max depth reached: {maxDepth.ToString()}");
-        XmasRush.Debug($"Store size: {store.Count}, {watch.ElapsedMilliseconds.ToString()}");
-
-    }
-
-    public static bool HasState(GameState state, PushCommand command)
-    {
-        var hash = ComputeStoreHash(state, command);
-        return GameStateStore.store.ContainsKey(hash);
-    }
-
-    public static string ComputeStoreHash(GameState gameState, PushCommand command)
-    {
-        return command.Hash + gameState.grid.Hash.ToString() ;
-    }
-}
-
 public class XmasRush
 {
     public static List<PushCommand> ComputeAllPossibleCommands()
@@ -1023,11 +960,6 @@ public class XmasRush
             Stopwatch watch = Stopwatch.StartNew();
             gameState = new GameState(grid, players[0], players[1], items);
 
-            if (turnCount == 1)
-            {
-                GameStateStore.InitializeStateStore(gameState);
-            }
-            
             // Write an action using Console.WriteLine()
             // To debug: Console.Error.WriteLine("Debug messages...");
             if (turnType == 0)
