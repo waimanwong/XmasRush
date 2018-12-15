@@ -9,10 +9,20 @@ using System.Text;
 
 public class Position
 {
+    public static int PositionAllocation = 0;
+
     public int x;
     public int y;
 
-    public Position(int x, int y)
+    public static Position Allocate(int x, int y)
+    {
+        PositionAllocation++;
+        return new Position(x, y);
+    }
+
+    protected Position() { }
+
+    protected Position(int x, int y)
     {
         this.x = x;
         this.y = y;
@@ -22,33 +32,7 @@ public class Position
     {
         return Math.Abs(this.x - otherPosition.x) + Math.Abs(this.y - otherPosition.y);
     }
-
-    public Position GetSibling(Direction direction)
-    {
-        int x = 0, y = 0;
-        switch (direction)
-        {
-            case Direction.UP:
-                x = this.x;
-                y = this.y - 1;
-                break;
-            case Direction.RIGHT:
-                x = this.x + 1;
-                y = this.y;
-                break;
-            case Direction.DOWN:
-                x = this.x;
-                y = this.y + 1;
-                break;
-            case Direction.LEFT:
-                x = this.x - 1;
-                y = this.y;
-                break;
-        }
-
-        return new Position(x, y);
-    }
-
+    
     public override string ToString()
     {
         return $"Position ({x.ToString()},{y.ToString()})";
@@ -65,19 +49,21 @@ public enum Direction
 
 public class Player : Position
 {
+    public static int PlayerAllocation = 0;
+
     public readonly int id;
     public readonly string tile;
 
     public Player(int id, int x, int y, string tile) : base(x, y)
     {
+        PlayerAllocation++;
+
         this.id = id;
         this.tile = tile;
     }
 
-    public Player(Player player) : base(player.x, player.y)
+    public Player(Player player) : this(player.id, player.x, player.y, player.tile )
     {
-        this.id = player.id;
-        this.tile = player.tile;
     }
 
     public override string ToString()
@@ -88,17 +74,38 @@ public class Player : Position
 
 public class Item : Position
 {
-    public readonly string itemName;
-    public readonly int playerId;
-
-    public bool IsInQuest = false;
-
-    public Item(int x, int y, string itemName, int playerId) : base(x, y)
+    public static int ItemAllocation = 0;
+    private static Item[] itemPool = new Item[50000];
+    
+    static Item()
     {
-        this.itemName = itemName;
-        this.playerId = playerId;
+        for(int i =0; i< itemPool.Length; i++)
+        {
+            itemPool[i] = new Item();
+        }
     }
 
+    public static void FreeAll()
+    {
+        ItemAllocation = 0;
+    }
+
+    public static Item Allocate(int x, int y, string itemName, int playerId, bool isInQuest)
+    {
+        var item = itemPool[ItemAllocation++];
+        item.x = x;
+        item.y = y;
+        item.playerId = playerId;
+        item.itemName = itemName;
+        item.IsInQuest = isInQuest;
+
+        return item;
+    }
+    
+    public string itemName;
+    public int playerId;
+    public bool IsInQuest = false;
+    
     public override string ToString()
     {
         return $"{itemName}[player{playerId.ToString()}] ({x},{y}) IsInQuest={IsInQuest.ToString()}";
@@ -107,19 +114,45 @@ public class Item : Position
 
 public class Grid
 {
+    public static int GridAllocation = 0;
 
-    private class CellSet
+    public class CellSet
     {
-        public  HashSet<int> cells;
-        public CellSet()
+        public static int CellSetAllocation = 0;
+        private static CellSet[] pool = new CellSet[5000];
+
+
+        static CellSet()
         {
-            cells = new HashSet<int>();
+            for (int i = 0; i < pool.Length; i++)
+            {
+                pool[i] = new CellSet() { cells = new HashSet<int>(49) };
+            }
         }
 
-        public CellSet(int x, int y) : this()
+        public static CellSet Allocate()
         {
-            cells.Add(x + (y * Grid.Width));
+            var cellSet = pool[CellSetAllocation++];
+
+            cellSet.cells.Clear();
+            
+            return cellSet;
         }
+
+        public static CellSet Allocate(int x, int y)
+        {
+            var cellSet = Allocate();
+            cellSet.cells.Add(x + (y * Grid.Width));
+
+            return cellSet;
+        }
+
+        public static void FreeAll()
+        {
+            CellSetAllocation = 0;
+        }
+
+        public HashSet<int> cells;
 
         public int GetId()
         {
@@ -133,7 +166,8 @@ public class Grid
 
         public CellSet Union(CellSet otherSet)
         {
-            CellSet newCellSet = new CellSet();
+            CellSet newCellSet = CellSet.Allocate();
+
             foreach (var cell in this.cells)
             {
                 newCellSet.cells.Add(cell);
@@ -157,7 +191,7 @@ public class Grid
     public static int Width = 7;
     public static int Heigth = 7;
 
-    public static Position Center = new Position(3, 3);
+    public static Position Center = Position.Allocate(3, 3);
 
     public readonly string[][] tiles;
 
@@ -172,6 +206,8 @@ public class Grid
 
     public Grid()
     {
+        Grid.GridAllocation++;
+
         tiles = new string[Width][];
 
         for (int x = 0; x < Width; x++)
@@ -268,7 +304,7 @@ public class Grid
 
     private void MakeSet(int x, int y)
     {
-        _cellsets.Add(new CellSet(x,y));
+        _cellsets.Add(CellSet.Allocate(x,y));
     }
 
     public IReadOnlyList<Position> GetConnectedNeighbors(Position from)
@@ -280,7 +316,7 @@ public class Grid
         {
             if (fromTile[(int)direction] == '1' )
             {
-                var neighborPosition = from.GetSibling(direction);
+                var neighborPosition = GetSibling(from, direction);
                 if (this.PositionIsValid(neighborPosition))
                 {
                     var neighborTile = tiles[neighborPosition.x][neighborPosition.y];
@@ -293,6 +329,32 @@ public class Grid
             }
         }
         return connectedNeighbors;
+    }
+
+    private Position GetSibling(Position p, Direction direction)
+    {
+        int x = 0, y = 0;
+        switch (direction)
+        {
+            case Direction.UP:
+                x = p.x;
+                y = p.y - 1;
+                break;
+            case Direction.RIGHT:
+                x = p.x + 1;
+                y = p.y;
+                break;
+            case Direction.DOWN:
+                x = p.x;
+                y = p.y + 1;
+                break;
+            case Direction.LEFT:
+                x = p.x - 1;
+                y = p.y;
+                break;
+        }
+
+        return Position.Allocate(x, y);
     }
 
     private bool PositionIsValid(Position position)
@@ -315,20 +377,20 @@ public class Grid
         if (item.x < 0)
         {
             int newY = direction == Direction.DOWN ? 0 : Grid.Heigth - 1;
-            return new Item(index, newY, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+            return Item.Allocate (index, newY, item.itemName, item.playerId, item.IsInQuest);
         }
         else if (item.x != index)
         {
-            return new Item(item.x, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+            return Item.Allocate(item.x, item.y, item.itemName, item.playerId, item.IsInQuest );
         }
         else
         {
             int newY = direction == Direction.DOWN ? item.y + 1 : item.y - 1;
             if (newY < 0 || newY == Grid.Heigth)
             {
-                return new Item(-1, -1, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+                return Item.Allocate(-1, -1, item.itemName, item.playerId, item.IsInQuest);
             }
-            return new Item(item.x, newY, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+            return Item.Allocate(item.x, newY, item.itemName, item.playerId, item.IsInQuest );
         }
     }
 
@@ -337,21 +399,21 @@ public class Grid
         if (item.y < 0)
         {
             int newX = direction == Direction.RIGHT ? 0 : Grid.Width - 1;
-            return new Item(newX, index, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+            return Item.Allocate(newX, index, item.itemName, item.playerId, item.IsInQuest );
         }
         else if (item.y != index)
         {
-            return new Item(item.x, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+            return Item.Allocate(item.x, item.y, item.itemName, item.playerId, item.IsInQuest );
         }
         else
         {
             int newX = direction == Direction.RIGHT ? item.x + 1 : item.x - 1;
             if (newX < 0 || newX == Grid.Width)
             {
-                return new Item(-1, -1, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+                return Item.Allocate(-1, -1, item.itemName, item.playerId, item.IsInQuest);
             }
 
-            return new Item(newX, item.y, item.itemName, item.playerId) { IsInQuest = item.IsInQuest };
+            return Item.Allocate(newX, item.y, item.itemName, item.playerId, item.IsInQuest );
         }
     }
 
@@ -581,23 +643,23 @@ public class GameState
 
         return score;
     }
-    
 }
 
 public struct PushCommand
 {
+    public static int PushCommandAllocation = 0;
+
     public int index;
     public Direction direction;
-    public string Hash;
-
+    
     public PushCommand(int index, Direction direction)
     {
+        PushCommandAllocation++;
+
         this.index = index;
         this.direction = direction;
-        Hash = this.index.ToString() + this.direction.ToString();
     }
-
-
+    
     public override string ToString()
     {
         return $"PUSH {index.ToString()} {direction.ToString()}";
@@ -628,23 +690,31 @@ public class PushAI
             //XmasRush.Debug($"Evaluate {pushCommands[i].ToString()}");
 
             var newGameState1 = gameState.RunCommand(pushCommands[i]);
-
-            for (int j = 0; j < pushCommands.Length && watch.ElapsedMilliseconds < 48; j++)
+            var score = newGameState1.ComputeScore(gameState);
+            if (score > bestScore)
             {
-                var newGameState2 = gameState.RunCommand(pushCommands[j]);
-
-                var score = newGameState2.ComputeScore(gameState);
-
-                //XmasRush.Debug($"score: {score.ToString()}");
-
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestPushCommand = pushCommands[i];
-                }
-
-                simulations++;
+                bestScore = score;
+                bestPushCommand = pushCommands[i];
             }
+
+            simulations++;
+
+            //for (int j = 0; j < pushCommands.Length && watch.ElapsedMilliseconds < 48; j++)
+            //{
+            //    var newGameState2 = gameState.RunCommand(pushCommands[j]);
+
+            //    var score = newGameState2.ComputeScore(gameState);
+
+            //    //XmasRush.Debug($"score: {score.ToString()}");
+
+            //    if (score > bestScore)
+            //    {
+            //        bestScore = score;
+            //        bestPushCommand = pushCommands[i];
+            //    }
+
+            //    simulations++;
+            //}
         }
 
         XmasRush.Debug($"Nb simulations = {simulations.ToString()} {watch.ElapsedMilliseconds.ToString()}ms");
@@ -661,6 +731,7 @@ public class PushAI
 
 public class MoveAI
 {
+    
     private const int MaxMoveCount = 20;
 
     private struct PointValue
@@ -761,7 +832,7 @@ public class MoveAI
 
             var collectedItemPosition = shortestPath.Last();
             myConnectedItemsInQuest.Remove(closestItem);
-            myPosition = new Position(collectedItemPosition.x, collectedItemPosition.y);
+            myPosition = Position.Allocate(collectedItemPosition.x, collectedItemPosition.y);
         }
 
         return myPosition;
@@ -836,7 +907,7 @@ public class MoveAI
         while (frontier.Count > 0)
         {
             var current = frontier.Dequeue();
-            var currentPosition = new Position(current.x, current.y);
+            var currentPosition = Position.Allocate(current.x, current.y);
 
             var neigbors = grid.GetConnectedNeighbors(from: currentPosition)
                 .Select(p => new PointValue(p))
@@ -933,7 +1004,7 @@ public class XmasRush
                 int itemY = int.Parse(inputs[2]);
                 int itemPlayerId = int.Parse(inputs[3]);
 
-                items[i] = new Item(itemX, itemY, itemName, itemPlayerId);
+                items[i] = Item.Allocate(itemX, itemY, itemName, itemPlayerId, false);
             }
 
             int numQuests = int.Parse(Console.ReadLine()); // the total number of revealed quests for both players
@@ -956,6 +1027,8 @@ public class XmasRush
             if (turnType == 0)
             {
                 //Push turn
+                XmasRush.Debug("Push turn");
+
                 PushAI pushAi = new PushAI(gameState);
                 Console.WriteLine(pushAi.ComputeCommand()); // PUSH <id> <direction> | MOVE <direction> | PASS
                 //XmasRush.Debug($"PushAI {watch.ElapsedMilliseconds.ToString()} ms");
@@ -963,10 +1036,22 @@ public class XmasRush
             else
             {
                 //Move turn
+                XmasRush.Debug("Move turn");
+
                 MoveAI moveAI = new MoveAI(gameState);
                 Console.WriteLine(moveAI.ComputeCommand());
                 //XmasRush.Debug($"MoveAI {watch.ElapsedMilliseconds.ToString()} ms");
             }
+
+            XmasRush.Debug($"Position allocation:{Position.PositionAllocation.ToString()}");
+            XmasRush.Debug($"Player allocation:{Player.PlayerAllocation.ToString()}");
+            XmasRush.Debug($"Item allocation:{Item.ItemAllocation.ToString()}");
+            XmasRush.Debug($"Grid allocation:{Grid.GridAllocation.ToString()}");
+            XmasRush.Debug($"GridCellSet allocation:{Grid.CellSet.CellSetAllocation.ToString()}");
+            XmasRush.Debug($"PushCommand allocation:{PushCommand.PushCommandAllocation.ToString()}");
+
+            Item.FreeAll();
+            Grid.CellSet.FreeAll();
 
             turnCount++;
         }
