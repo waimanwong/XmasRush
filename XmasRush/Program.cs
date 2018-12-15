@@ -107,20 +107,20 @@ public class Item : Position
 
 public struct Tile
 {
-    private readonly string _directions;
+    public readonly string directions;
     public Tile(string tile)
     {
-        _directions = tile;
+        directions = tile;
     }
 
     public bool IsOpenedTo(Direction direction)
     {
-        return _directions[(int)direction] == '1';
+        return directions[(int)direction] == '1';
     }
 
     public override string ToString()
     {
-        return _directions;
+        return directions;
     }
 }
 
@@ -186,6 +186,9 @@ public class Grid
 
     public int CellSetCount => _cellsets.Count;
 
+    public readonly StringBuilder Hash;
+
+
     public Grid()
     {
         tiles = new Tile[Width][];
@@ -196,6 +199,7 @@ public class Grid
         }
 
         _cellsets = new List<CellSet>(Grid.Width * Grid.Heigth);
+        Hash = new StringBuilder();
     }
 
     public override string ToString()
@@ -217,6 +221,8 @@ public class Grid
 
     public void AddTile(int x, int y, Tile tile)
     {
+        Hash.Append(tile.directions);
+
         tiles[x][y] = tile;
         
         MakeSet(x, y);
@@ -262,6 +268,11 @@ public class Grid
         return _cellsets.Single(set => set.Contains(x,y));
     }
 
+    public int CellSetSize(int x, int y)
+    {
+        return _cellsets.Single(set => set.Contains(x, y)).cells.Count;
+    }
+
     private void Union(CellSet c1, CellSet c2)
     {
         CellSet newCellSet = c1.Union(c2);
@@ -305,14 +316,6 @@ public class Grid
     {
         return 0 <= position.x && position.x < Grid.Width &&
                 0 <= position.y && position.y < Grid.Heigth;
-    }
-
-    public void DumpDisjoinSets()
-    {
-        foreach (var cellSet in _cellsets)
-        {
-            XmasRush.Debug(cellSet.ToString());
-        }
     }
 
     public Tuple<Grid, Tile> Push(int index, Direction direction, Tile tile)
@@ -522,13 +525,6 @@ public class Grid
         return new Tuple<Grid, Tile>(newGrid, outputTile.Value);
     }
 
-    public int DistanceToClosestBorder(int x, int y)
-    {
-        int minX = Math.Min(x, Grid.Width - 1 - x);
-        int minY = Math.Min(y, Grid.Heigth - 1 - y);
-
-        return Math.Min(minX, minY);
-    }
 }
 
 public class GameState
@@ -539,6 +535,8 @@ public class GameState
     public readonly Player enemy;
 
     public readonly Item[] items;
+
+    public int Depth = 0;
 
     public GameState(Grid grid, Player me, Player enemy, Item[] items)
     {
@@ -555,7 +553,7 @@ public class GameState
             .ToArray();
     }
 
-    public GameState Evaluate(PushCommand pushCommand)
+    public GameState RunCommand(PushCommand pushCommand)
     {
         var index = pushCommand.index;
         var direction = pushCommand.direction;
@@ -568,14 +566,13 @@ public class GameState
         var newEnemy = grid.PushPlayer(index, direction, this.enemy, this.enemy.tile);
         var newItems = this.items.Select(it => grid.PushItem(index, direction, it)).ToArray();
 
-        return new GameState(newGrid, newMe, newEnemy, newItems);
+        return new GameState(newGrid, newMe, newEnemy, newItems) { Depth = this.Depth + 1 };
 
     }
 
     public int ComputeScore(GameState oldState)
     {
         int score = 0;
-
         Item[] myItems = items.Where(it => it.playerId == 0).ToArray();
 
         foreach (var item in myItems.Where(it => it.IsInQuest).ToArray())
@@ -600,17 +597,22 @@ public class GameState
 
         return score;
     }
+    
 }
 
 public struct PushCommand
 {
     public int index;
     public Direction direction;
+    public string Hash;
+
     public PushCommand(int index, Direction direction)
     {
         this.index = index;
         this.direction = direction;
+        Hash = this.index.ToString() + this.direction.ToString();
     }
+
 
     public override string ToString()
     {
@@ -640,14 +642,23 @@ public class PushAI
         Random rand = new Random();
         PushCommand bestPushCommand = new PushCommand(rand.Next(0, 6), (Direction)rand.Next(0, 4));
 
-        List<PushCommand> pushCommands = ComputeAllPossibleCommands();
+        PushCommand[] pushCommands = XmasRush.ComputeAllPossibleCommands().ToArray();
 
-        foreach (var pushCommand1 in pushCommands)
+        for(int i = 0; i < pushCommands.Length; i++)
         {
+            var pushCommand1 = pushCommands[i];
+       
             //XmasRush.Debug("****************************************");
             //XmasRush.Debug($"Evaluate {pushCommand1.ToString()}");
 
-            var newGameState1 = gameState.Evaluate(pushCommand1);
+            if(i == 0)
+            {
+                var hash = GameStateStore.ComputeStoreHash(gameState, pushCommand1);
+                XmasRush.Debug(hash);
+                XmasRush.Debug($"found hash = {GameStateStore.HasState(gameState, pushCommand1)}");
+            }
+
+            var newGameState1 = gameState.RunCommand(pushCommand1);
             var score = newGameState1.ComputeScore(gameState);
 
             //XmasRush.Debug($"score: {score.ToString()}");
@@ -663,20 +674,7 @@ public class PushAI
 
     }
 
-    private List<PushCommand> ComputeAllPossibleCommands()
-    {
-        List<PushCommand> commands = new List<PushCommand>();
-
-        for (int index = 0; index < 7; index++)
-        {
-            foreach (var direction in Grid.AllDirections)
-            {
-                commands.Add(new PushCommand(index, direction));
-            }
-        }
-
-        return commands;
-    }
+    
 }
 
 public class MoveAI
@@ -874,11 +872,81 @@ public class MoveAI
 
         return cameFrom;
     }
+}
 
+public static class GameStateStore
+{
+    public static readonly Dictionary<string, GameState> store = new Dictionary<string, GameState>();
+
+    public static void InitializeStateStore(GameState gameState)
+    {
+        Stopwatch watch = Stopwatch.StartNew();
+
+        var allPossibleCommands = XmasRush.ComputeAllPossibleCommands();
+
+        Queue<GameState> toVisit = new Queue<GameState>();
+        toVisit.Enqueue(gameState);
+
+        Queue<string> hashes = new Queue<string>();
+
+        int maxDepth = 0;
+
+        while (toVisit.Count > 0 && watch.ElapsedMilliseconds < 950)
+        {
+            var curGameState = toVisit.Dequeue();
+
+            foreach (var command in allPossibleCommands)
+            {
+                var hash = ComputeStoreHash(curGameState, command);
+                if (store.ContainsKey(hash) == false)
+                {
+                    var newGameState = curGameState.RunCommand(command);
+                    hashes.Enqueue(hash);
+                    store.Add(hash, newGameState);
+
+                    if(maxDepth < newGameState.Depth)
+                    {
+                        maxDepth = newGameState.Depth;
+                    }
+
+                    toVisit.Enqueue(newGameState);
+                }
+            }
+        }
+        XmasRush.Debug($"Max depth reached: {maxDepth.ToString()}");
+        XmasRush.Debug($"Store size: {store.Count}, {watch.ElapsedMilliseconds.ToString()}");
+
+    }
+
+    public static bool HasState(GameState state, PushCommand command)
+    {
+        var hash = ComputeStoreHash(state, command);
+        return GameStateStore.store.ContainsKey(hash);
+    }
+
+    public static string ComputeStoreHash(GameState gameState, PushCommand command)
+    {
+        return command.Hash + gameState.grid.Hash.ToString() ;
+    }
 }
 
 public class XmasRush
 {
+    public static List<PushCommand> ComputeAllPossibleCommands()
+    {
+        List<PushCommand> commands = new List<PushCommand>();
+
+        for (int index = 0; index < 7; index++)
+        {
+            foreach (var direction in Grid.AllDirections)
+            {
+                commands.Add(new PushCommand(index, direction));
+            }
+        }
+
+        return commands;
+    }
+
     public static void Debug(string message)
     {
         Console.Error.WriteLine(message);
@@ -887,6 +955,8 @@ public class XmasRush
     static void Main(string[] args)
     {
         string[] inputs;
+        GameState gameState = null;
+        int turnCount = 1;
 
         // game loop
         while (true)
@@ -951,9 +1021,13 @@ public class XmasRush
             }
 
             Stopwatch watch = Stopwatch.StartNew();
+            gameState = new GameState(grid, players[0], players[1], items);
 
-            GameState gameState = new GameState(grid, players[0], players[1], items);
-
+            if (turnCount == 1)
+            {
+                GameStateStore.InitializeStateStore(gameState);
+            }
+            
             // Write an action using Console.WriteLine()
             // To debug: Console.Error.WriteLine("Debug messages...");
             if (turnType == 0)
@@ -970,6 +1044,8 @@ public class XmasRush
                 Console.WriteLine(moveAI.ComputeCommand());
                 //XmasRush.Debug($"MoveAI {watch.ElapsedMilliseconds.ToString()} ms");
             }
+
+            turnCount++;
         }
     }
 }
