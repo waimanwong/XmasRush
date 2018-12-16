@@ -628,25 +628,21 @@ public class GameState
     public int ComputeScore(GameState oldState)
     {
         int score = 0;
-        Item[] myItems = items.Where(it => it.playerId == 0).ToArray();
+        Item[] itemsInQuest = items.Where(it => it.IsInQuest).ToArray();
 
-        foreach (var item in myItems.Where(it => it.IsInQuest).ToArray())
+        foreach (var item in itemsInQuest)
         {
             if (item.x >= 0)
             {
-                if (grid.ArePositionsConnected(this.me, item))
+                if (item.playerId == 0 && grid.ArePositionsConnected(this.me, item))
                 {
-                    //XmasRush.Debug($"Me: {this.me.ToString()} and item: {item.ToString()}");
-                    score += 2000;
-                    score += (20 - this.me.DistanceTo(item));
+                    score += 100;
+                    
                 }
-
-                score += item.DistanceTo(Grid.Center);
-
-            }
-            if (item.x < 0)
-            {
-                score += 1000;
+                if(item.playerId == 1 && grid.ArePositionsConnected(this.enemy, item))
+                {
+                    score -= 100;
+                }
             }
         }
 
@@ -701,11 +697,15 @@ public class PushAI
             var newGameState1 = gameState.RunCommand(pushCommands[i]);
             simulations++;
 
-            var score = newGameState1.ComputeScore(gameState);
-            if (score > bestScore)
+            for (int j = 0; j < pushCommands.Length && watch.ElapsedMilliseconds < 48; j++)
             {
-                bestScore = score;
-                bestPushCommand = pushCommands[i];
+                var score = newGameState1.ComputeScore(gameState);
+                simulations++;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestPushCommand = pushCommands[i];
+                }
             }
         }
 
@@ -762,7 +762,7 @@ public class MoveAI
 
         if (directions.Count < MoveAI.MaxMoveCount)
         {
-            MoveToGridBorder(myNewPosition, ref directions);
+            MoveToGridCenter(myNewPosition, ref directions);
         }
 
         if (directions.Count > 0)
@@ -777,10 +777,10 @@ public class MoveAI
         }
     }
 
-    private void MoveToGridBorder(Position myNewPosition, ref List<Direction> directions)
+    private void MoveToGridCenter(Position myNewPosition, ref List<Direction> directions)
     {
         var cameFrom = ComputeBFS(fromPosition: myNewPosition);
-        var targetPosition = cameFrom.OrderByDescending(kvp => kvp.Key.DistanceTo(Grid.Center.x, Grid.Center.y)).First();
+        var targetPosition = cameFrom.OrderBy(kvp => kvp.Key.DistanceTo(Grid.Center.x, Grid.Center.y)).First();
         var path = ComputePath(
             from: new PointValue(myNewPosition),
             goal: targetPosition.Key,
